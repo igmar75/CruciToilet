@@ -62,11 +62,11 @@
         //         CONFIGURAZIONE DI BASE DEL GIOCO
         // ==========================================
         const DEBUG_MODE = false; // Imposta a false per nascondere il pannello di debug in fondo ad attività ultimata
-        const VERSION = "Ver 1.6"; // Versione del gioco visibile nella schermata iniziale
+        const VERSION = "Ver 1.7"; // Versione del gioco visibile nella schermata iniziale
         const GRID_SIZE = 8;       // Dimensione della griglia (es. 8 = 8x8)
 
         // Probabilità base (in %) di ricevere il forziere a fine parola (es. 25 = 25% di possibilità)
-        const BASE_REWARD_PROBABILITY = 25; 
+        const BASE_REWARD_PROBABILITY = 5; 
 
         // ==========================================
         //         ELENCO DEI VIDEO PREMIO CON PESO/PROBABILITÀ
@@ -74,14 +74,14 @@
         // I video devono risiedere direttamente dentro la cartella "assets/".
         // Il campo "weight" rappresenta la frequenza relativa/probabilità (es. 0 - 100).
         const REWARD_VIDEOS = [
-            { file: "skibidi_toilet_web.mp4", weight: 30 },
-            { file: "skibidi_toilet_gigante_web.mp4", weight: 20 },
-            { file: "Skibidi_67.mp4", weight: 15 },
-            { file: "Skibidi_CocaCola.mp4", weight: 15 },
-            { file: "Skibidi_Elia.mp4", weight: 35 },
-            { file: "Skibidi_Minecraft1.mp4", weight: 20 },
-            { file: "Skibidi_Minecraft2.mp4", weight: 20 },
-            { file: "skibidi toilet verity 3.mp4", weight: 10 }
+            { file: "skibidi_toilet_web.mp4", weight: 1 },
+            { file: "skibidi_toilet_gigante_web.mp4", weight: 1 },
+            { file: "Skibidi_67.mp4", weight: 1 },
+            { file: "Skibidi_CocaCola.mp4", weight: 1 },
+            { file: "Skibidi_Elia.mp4", weight: 1 },
+            { file: "Skibidi_Minecraft1.mp4", weight: 1 },
+            { file: "Skibidi_Minecraft2.mp4", weight: 1 },
+            { file: "skibidi toilet verity 3.mp4", weight: 93 }
         ];
 
         const AUDIO_CONFIG = {
