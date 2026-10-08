@@ -62,9 +62,27 @@
         //         CONFIGURAZIONE DI BASE DEL GIOCO
         // ==========================================
         const DEBUG_MODE = false; // Imposta a false per nascondere il pannello di debug in fondo ad attività ultimata
-        const VERSION = "Ver 1.5"; // Versione del gioco visibile nella schermata iniziale
+        const VERSION = "Ver 1.6"; // Versione del gioco visibile nella schermata iniziale
         const GRID_SIZE = 8;       // Dimensione della griglia (es. 8 = 8x8)
-        const WORDS_PER_REWARD = 5; // Ogni quante parole mostrare il forziere
+
+        // Probabilità base (in %) di ricevere il forziere a fine parola (es. 25 = 25% di possibilità)
+        const BASE_REWARD_PROBABILITY = 25; 
+
+        // ==========================================
+        //         ELENCO DEI VIDEO PREMIO CON PESO/PROBABILITÀ
+        // ==========================================
+        // I video devono risiedere direttamente dentro la cartella "assets/".
+        // Il campo "weight" rappresenta la frequenza relativa/probabilità (es. 0 - 100).
+        const REWARD_VIDEOS = [
+            { file: "skibidi_toilet_web.mp4", weight: 30 },
+            { file: "skibidi_toilet_gigante_web.mp4", weight: 20 },
+            { file: "Skibidi_67.mp4", weight: 15 },
+            { file: "Skibidi_CocaCola.mp4", weight: 15 },
+            { file: "Skibidi_Elia.mp4", weight: 35 },
+            { file: "Skibidi_Minecraft1.mp4", weight: 20 },
+            { file: "Skibidi_Minecraft2.mp4", weight: 20 },
+            { file: "skibidi toilet verity 3.mp4", weight: 10 }
+        ];
 
         const AUDIO_CONFIG = {
             bgMusicVolume: 0.1,       // Volume normale musica di sottofondo (0.0 - 1.0)
@@ -76,21 +94,6 @@
             victoryVolume: 0.5,       // Volume del jingle MP3 di vittoria (0.0 - 1.0)
             videoVolume: 0.3          // Volume del video premio (0.0 - 1.0)
         };
-
-        // ==========================================
-        //         ELENCO DEI VIDEO PREMIO
-        // ==========================================
-        // I video devono risiedere direttamente dentro la cartella "assets/"
-        const REWARD_VIDEOS = [
-        //    "skibidi_toilet_web.mp4",
-        //    "skibidi_toilet_gigante_web.mp4",
-        //    "Skibidi_67.mp4",
-        //    "Skibidi_CocaCola.mp4",
-        //    "Skibidi_Elia.mp4",
-        //    "Skibidi_Minecraft1.mp4",
-        //    "Skibidi_Minecraft2.mp4",
-            "skibidi toilet verity 3.mp4"
-        ];
 
         const { useState, useEffect, useCallback, useRef } = React;
         
@@ -323,54 +326,95 @@
             const handleCellClick = (r, c) => {
                 if (found || showReward) return;
                 const id = `${r}-${c}`;
-                if (correctCoords.includes(id)) {
-                    if (feedbackMap[id] !== 'correct') {
-                        playTone(660, 'sine', 0.15, AUDIO_CONFIG.toneVolume);
-                        const newFeedback = { ...feedbackMap, [id]: 'correct' };
-                        setFeedbackMap(newFeedback);
-                        const newCount = foundCount + 1;
-                        setFoundCount(newCount);
-                        if (newCount === correctCoords.length) {
-                            setFound(true);
-                            const nextTotal = totalSolved + 1;
-                            setTotalSolved(nextTotal);
-                            addLog(`Parola completata! Totale completate: ${nextTotal}`);
-                            
-                            setTimeout(() => playTone(523, 'sine', 0.2, AUDIO_CONFIG.toneVolume), 100);
-                            setTimeout(() => playTone(783, 'sine', 0.4, AUDIO_CONFIG.toneVolume), 300);
 
-                            const isSpecialVictory = nextTotal % WORDS_PER_REWARD === 0;
-                            const soundPath = isSpecialVictory ? 'audio/super_victory.mp3' : 'audio/victory.mp3';
+                // Se la cella è già stata indovinata correttamente, non fare nulla
+                if (feedbackMap[id] === 'correct') return;
 
-                            const victoryAudio = new Audio(soundPath);
-                            victoryAudio.volume = AUDIO_CONFIG.victoryVolume;
-                            victoryAudio.play()
-                                .catch(() => {
-                                    const winSound = new SpeechSynthesisUtterance("Urrà!");
-                                    winSound.lang = 'it-IT';
-                                    winSound.pitch = 1.3;
-                                    winSound.volume = AUDIO_CONFIG.speechVolume;
-                                    window.speechSynthesis.speak(winSound);
-                                });
+                // Coordinata della lettera che ci si aspetta in ordine
+                const expectedId = correctCoords[foundCount];
 
-                            setTimeout(() => {
-                                if (nextTotal % WORDS_PER_REWARD === 0) {
-                                    if (REWARD_VIDEOS.length > 0) {
-                                        const randomVid = REWARD_VIDEOS[Math.floor(Math.random() * REWARD_VIDEOS.length)];
-                                        const videoPath = `assets/${randomVid}`;
-                                        setSelectedVideo(encodeURI(videoPath));
-                                        addLog(`Selezionato video: ${videoPath}`);
+                if (id === expectedId) {
+                    // Lettera corretta in ordine sequenziale
+                    playTone(660, 'sine', 0.15, AUDIO_CONFIG.toneVolume);
+                    const newFeedback = { ...feedbackMap, [id]: 'correct' };
+                    setFeedbackMap(newFeedback);
+                    const newCount = foundCount + 1;
+                    setFoundCount(newCount);
+
+                    if (newCount === correctCoords.length) {
+                        setFound(true);
+                        const nextTotal = totalSolved + 1;
+                        setTotalSolved(nextTotal);
+                        addLog(`Parola completata! Totale completate: ${nextTotal}`);
+                        
+                        setTimeout(() => playTone(523, 'sine', 0.2, AUDIO_CONFIG.toneVolume), 100);
+                        setTimeout(() => playTone(783, 'sine', 0.4, AUDIO_CONFIG.toneVolume), 300);
+
+                        // --- ESTRAZIONE A 2 PASSI ---
+                        // 1° Tiro: Controllo se si vince il forziere premio
+                        const rewardRoll = Math.random() * 100;
+                        const isSpecialVictory = rewardRoll < BASE_REWARD_PROBABILITY;
+                        addLog(`Tiro premio: ${rewardRoll.toFixed(1)} / Soglia: ${BASE_REWARD_PROBABILITY}% -> Premio: ${isSpecialVictory ? 'SÌ' : 'NO'}`);
+
+                        const soundPath = isSpecialVictory ? 'audio/super_victory.mp3' : 'audio/victory.mp3';
+
+                        const victoryAudio = new Audio(soundPath);
+                        victoryAudio.volume = AUDIO_CONFIG.victoryVolume;
+                        victoryAudio.play()
+                            .catch(() => {
+                                const winSound = new SpeechSynthesisUtterance("Urrà!");
+                                winSound.lang = 'it-IT';
+                                winSound.pitch = 1.3;
+                                winSound.volume = AUDIO_CONFIG.speechVolume;
+                                window.speechSynthesis.speak(winSound);
+                            });
+
+                        setTimeout(() => {
+                            if (isSpecialVictory) {
+                                // 2° Tiro: Selezione ponderata del video in base ai pesi
+                                if (REWARD_VIDEOS.length > 0) {
+                                    const totalWeight = REWARD_VIDEOS.reduce((acc, v) => acc + (Number(v.weight) || 0), 0);
+                                    let chosenVideoFile = REWARD_VIDEOS[0].file;
+
+                                    if (totalWeight > 0) {
+                                        const videoRoll = Math.random() * totalWeight;
+                                        let cumulative = 0;
+                                        for (const vid of REWARD_VIDEOS) {
+                                            cumulative += (Number(vid.weight) || 0);
+                                            if (videoRoll <= cumulative) {
+                                                chosenVideoFile = vid.file;
+                                                break;
+                                            }
+                                        }
+                                        addLog(`Tiro video: ${videoRoll.toFixed(1)} / Totale peso: ${totalWeight} -> Scelto: ${chosenVideoFile}`);
+                                    } else {
+                                        chosenVideoFile = REWARD_VIDEOS[Math.floor(Math.random() * REWARD_VIDEOS.length)].file;
                                     }
-                                    setShowReward(true);
-                                    setChestState('closed');
-                                    if (bgMusicRef.current) bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolumeDucked;
-                                } else {
-                                    initGame();
+
+                                    const videoPath = `assets/${chosenVideoFile}`;
+                                    setSelectedVideo(encodeURI(videoPath));
                                 }
-                            }, 3000);
-                        }
+                                setShowReward(true);
+                                setChestState('closed');
+                                if (bgMusicRef.current) bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolumeDucked;
+                            } else {
+                                initGame();
+                            }
+                        }, 3000);
                     }
+                } else if (correctCoords.includes(id)) {
+                    // La lettera fa parte della parola MA non è quella nel turno giusto -> Feedback Giallo
+                    playTone(400, 'sine', 0.2, AUDIO_CONFIG.toneVolume);
+                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong-order' }));
+                    setTimeout(() => {
+                        setFeedbackMap(prev => {
+                            const next = { ...prev };
+                            if (next[id] === 'wrong-order') delete next[id];
+                            return next;
+                        });
+                    }, 600);
                 } else {
+                    // Lettera completamente sbagliata -> Feedback Rosso
                     playTone(150, 'triangle', 0.3, AUDIO_CONFIG.toneVolume);
                     setFeedbackMap(prev => ({ ...prev, [id]: 'wrong' }));
                     setTimeout(() => {
@@ -418,7 +462,8 @@
             };
 
             const checkFileExistence = async () => {
-                const videoPath = `assets/${REWARD_VIDEOS[0]}`;
+                const firstVideo = REWARD_VIDEOS[0]?.file || REWARD_VIDEOS[0];
+                const videoPath = `assets/${firstVideo}`;
                 addLog(`Verifica esistenza: ${videoPath}...`);
                 try {
                     const response = await fetch(videoPath, { method: 'HEAD' });
@@ -538,11 +583,13 @@
                                         <Icon name="star" size={18} className="text-yellow-500" fill="currentColor" />
                                         <span className="font-black text-indigo-900 text-lg">{totalSolved}</span>
                                     </div>
-                                    <div className="flex-1 mx-3 bg-indigo-200/50 h-5 rounded-full overflow-hidden border-2 border-white shadow-inner relative">
-                                        <div className="bg-yellow-400 h-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(250,204,21,0.5)]" style={{ width: `${(totalSolved % WORDS_PER_REWARD) * (100/WORDS_PER_REWARD)}%` }} />
+                                    <div className="flex-1 mx-3 flex items-center justify-center">
+                                        <span className="text-indigo-900 font-extrabold text-sm tracking-wide bg-white/60 px-3 py-1 rounded-full border border-white/40 shadow-sm flex items-center gap-1">
+                                            🎁 Sorpresa possibile!
+                                        </span>
                                     </div>
-                                    <div className="bg-white p-1 rounded-xl shadow-sm border-b-2 border-indigo-100 text-indigo-300">
-                                        <Icon name="gift" size={20} className={totalSolved % WORDS_PER_REWARD === 0 && totalSolved !== 0 ? "text-green-500 animate-bounce" : ""} />
+                                    <div className="bg-white p-1.5 rounded-xl shadow-sm border-b-2 border-indigo-100 text-yellow-500">
+                                        <Icon name="gift" size={20} className="animate-pulse" />
                                     </div>
                                 </div>
 
@@ -558,6 +605,7 @@
                                         let cellClass = "bg-white text-indigo-800 border-indigo-100";
                                         if (status === 'correct') cellClass = "bg-green-500 text-white shadow-inner scale-95 border-green-600";
                                         if (status === 'wrong') cellClass = "bg-red-500 text-white animate-shake border-red-600";
+                                        if (status === 'wrong-order') cellClass = "bg-yellow-400 text-indigo-950 animate-shake border-yellow-500 font-extrabold shadow-md";
                                         return (
                                             <button key={id} onClick={() => handleCellClick(r, c)} className={`flex items-center justify-center text-2xl sm:text-3xl font-black rounded-lg transition-all duration-200 aspect-square border-b-2 ${cellClass} ${!status ? 'hover:bg-indigo-50 active:bg-indigo-200' : ''}`}>{char}</button>
                                         );
