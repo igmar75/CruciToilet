@@ -326,4 +326,658 @@
             }, [gameStarted, found, speakWord, showReward, isBossMode]);
 
             // ==========================================
-            //      
+            //            LOGICA BOSS FIGHT
+            // ==========================================
+            const setupNextBossWord = useCallback((wordsList) => {
+                const available = (wordsList && wordsList.length > 0) ? wordsList : words;
+                if (!available || available.length === 0) return;
+
+                const target = available[Math.floor(Math.random() * available.length)];
+                setBossTargetWord(target);
+
+                // Seleziona 2 distrattori diversi
+                const distractors = [];
+                const pool = available.filter(w => w !== target);
+                while (distractors.length < 2 && pool.length > 0) {
+                    const randIdx = Math.floor(Math.random() * pool.length);
+                    const picked = pool.splice(randIdx, 1)[0];
+                    distractors.push(picked);
+                }
+
+                const allThree = [target, ...distractors].sort(() => Math.random() - 0.5);
+                setBossOptions(allThree);
+
+                setTimeout(() => {
+                    speakWordText(target);
+                }, 300);
+            }, [words]);
+
+            const startBossFight = useCallback(() => {
+                addLog("ATTENZIONE: Avvio Boss Fight!", "warning");
+                setIsBossMode(true);
+                setBossHp(BOSS_MAX_HP);
+                setBossTimeLeft(BOSS_TIME_LIMIT);
+                setBossEffect(null);
+                setBossEndState(null);
+                setIsBossLocked(false);
+
+                // Passaggio musica
+                if (bgMusicRef.current) {
+                    bgMusicRef.current.pause();
+                }
+                if (bossMusicRef.current) {
+                    bossMusicRef.current.currentTime = 0;
+                    bossMusicRef.current.play().catch(() => {});
+                }
+
+                setupNextBossWord(words);
+
+                // Timer vocale ripetuto ogni 4.5 secondi per il boss
+                if (bossSpeechIntervalRef.current) clearInterval(bossSpeechIntervalRef.current);
+            }, [words, addLog, setupNextBossWord]);
+
+            const endBossFight = (outcome) => {
+                if (bossTimerRef.current) clearInterval(bossTimerRef.current);
+                if (bossSpeechIntervalRef.current) clearInterval(bossSpeechIntervalRef.current);
+                window.speechSynthesis.cancel();
+
+                setBossEndState(outcome);
+                setIsBossLocked(true);
+
+                if (outcome === 'won') {
+                    addLog("Boss Sconfitto! +5 Stelle!", "success");
+                    playAudioFile('audio/super_victory.mp3', AUDIO_CONFIG.victoryVolume);
+                    setTotalSolved(prev => prev + 5);
+                } else {
+                    addLog("Boss fuggito! Tempo scaduto.", "warning");
+                    playTone(180, 'sawtooth', 0.5, AUDIO_CONFIG.toneVolume);
+                }
+
+                // Torna al gioco ordinario dopo 3 secondi
+                setTimeout(() => {
+                    if (bossMusicRef.current) {
+                        bossMusicRef.current.pause();
+                    }
+                    if (bgMusicRef.current && gameStarted) {
+                        bgMusicRef.current.play().catch(() => {});
+                    }
+                    setIsBossMode(false);
+                    setBossEndState(null);
+                    setBossEffect(null);
+                    initGame();
+                }, 3500);
+            };
+
+            // Conto alla rovescia del timer Boss Fight
+            useEffect(() => {
+                if (isBossMode && !bossEndState) {
+                    bossTimerRef.current = setInterval(() => {
+                        setBossTimeLeft(prev => {
+                            if (prev <= 1) {
+                                clearInterval(bossTimerRef.current);
+                                endBossFight('lost');
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                }
+                return () => {
+                    if (bossTimerRef.current) clearInterval(bossTimerRef.current);
+                };
+            }, [isBossMode, bossEndState]);
+
+            // Ripetizione vocale durante il Boss
+            useEffect(() => {
+                if (isBossMode && bossTargetWord && !bossEndState) {
+                    bossSpeechIntervalRef.current = setInterval(() => {
+                        speakWordText(bossTargetWord);
+                    }, 4500);
+                }
+                return () => {
+                    if (bossSpeechIntervalRef.current) clearInterval(bossSpeechIntervalRef.current);
+                };
+            }, [isBossMode, bossTargetWord, bossEndState]);
+
+            const handleBossChoice = (chosenWord) => {
+                if (isBossLocked || bossEndState || !isBossMode) return;
+
+                if (chosenWord === bossTargetWord) {
+                    // Risposta ESATTA: esplosione e danno
+                    setIsBossLocked(true);
+                    setBossEffect('hit');
+                    playAudioFile('audio/boss_hit.mp3', AUDIO_CONFIG.bossHitVolume);
+                    addLog("Boss colpito con successo!", "success");
+
+                    const newHp = bossHp - 1;
+                    setBossHp(newHp);
+
+                    setTimeout(() => {
+                        setBossEffect(null);
+                        if (newHp <= 0) {
+                            endBossFight('won');
+                        } else {
+                            setIsBossLocked(false);
+                            setupNextBossWord(words);
+                        }
+                    }, 1200);
+                } else {
+                    // Risposta SBAGLIATA: fumo
+                    setIsBossLocked(true);
+                    setBossEffect('miss');
+                    playAudioFile('audio/boss_miss.mp3', AUDIO_CONFIG.bossMissVolume);
+                    addLog("Colpo a vuoto sul boss!", "warning");
+
+                    setTimeout(() => {
+                        setBossEffect(null);
+                        setIsBossLocked(false);
+                    }, 900);
+                }
+            };
+
+            // ==========================================
+            //            LOGICA GIOCO STANDARD
+            // ==========================================
+            const initGame = useCallback((forceNextCase = null) => {
+                if (words.length === 0) return;
+                const nextCase = forceNextCase !== null ? forceNextCase : !isUppercase;
+                setIsUppercase(nextCase);
+                const word = words[Math.floor(Math.random() * words.length)];
+                const displayWord = nextCase ? word.toUpperCase() : word.toLowerCase();
+                setCurrentWord(displayWord);
+                setFound(false);
+                setFoundCount(0);
+                setFeedbackMap({});
+                
+                let newGrid = Array(GRID_SIZE).fill(null).map(() => 
+                    Array(GRID_SIZE).fill(null).map(() => {
+                        const charCode = Math.floor(Math.random() * 26) + (nextCase ? 65 : 97);
+                        return String.fromCharCode(charCode);
+                    })
+                );
+
+                const row = Math.floor(Math.random() * GRID_SIZE);
+                const startCol = Math.floor(Math.random() * (GRID_SIZE - word.length + 1));
+                const coords = [];
+                for (let i = 0; i < word.length; i++) {
+                    newGrid[row][startCol + i] = displayWord[i];
+                    coords.push(`${row}-${startCol + i}`);
+                }
+                setGrid(newGrid);
+                setCorrectCoords(coords);
+            }, [isUppercase, words]);
+
+            const handleStartGame = () => {
+                setGameStarted(true);
+                initGame(true);
+                addLog("Partita avviata dall'utente.");
+                if (bgMusicRef.current) {
+                    bgMusicRef.current.play()
+                        .catch(e => addLog(`Musica bloccata: ${e.message}`, "warning"));
+                }
+            };
+
+            const handleExitGame = () => {
+                window.speechSynthesis.cancel();
+                if (speechIntervalRef.current) clearInterval(speechIntervalRef.current);
+                if (bossSpeechIntervalRef.current) clearInterval(bossSpeechIntervalRef.current);
+                if (bossTimerRef.current) clearInterval(bossTimerRef.current);
+
+                if (bgMusicRef.current) {
+                    bgMusicRef.current.pause();
+                    bgMusicRef.current.currentTime = 0;
+                }
+                if (bossMusicRef.current) {
+                    bossMusicRef.current.pause();
+                    bossMusicRef.current.currentTime = 0;
+                }
+                setGameStarted(false);
+                setShowReward(false);
+                setIsBossMode(false);
+                setFound(false);
+            };
+
+            const handleCellClick = (r, c) => {
+                if (found || showReward || isBossMode) return;
+                const id = `${r}-${c}`;
+
+                if (feedbackMap[id] === 'correct') return;
+
+                const expectedId = correctCoords[foundCount];
+
+                if (id === expectedId) {
+                    playTone(660, 'sine', 0.15, AUDIO_CONFIG.toneVolume);
+                    const newFeedback = { ...feedbackMap, [id]: 'correct' };
+                    setFeedbackMap(newFeedback);
+                    const newCount = foundCount + 1;
+                    setFoundCount(newCount);
+
+                    if (newCount === correctCoords.length) {
+                        setFound(true);
+                        const nextTotal = totalSolved + 1;
+                        setTotalSolved(nextTotal);
+                        addLog(`Parola completata! Totale completate: ${nextTotal}`);
+                        
+                        setTimeout(() => playTone(523, 'sine', 0.2, AUDIO_CONFIG.toneVolume), 100);
+                        setTimeout(() => playTone(783, 'sine', 0.4, AUDIO_CONFIG.toneVolume), 300);
+
+                        // CONTROLLO ATTIVAZIONE BOSS FIGHT: ogni BOSS_WORDS_INTERVAL parole
+                        const triggersBoss = (nextTotal % BOSS_WORDS_INTERVAL === 0);
+
+                        const soundPath = triggersBoss ? 'audio/super_victory.mp3' : 'audio/victory.mp3';
+                        const victoryAudio = new Audio(soundPath);
+                        victoryAudio.volume = AUDIO_CONFIG.victoryVolume;
+                        victoryAudio.play().catch(() => {});
+
+                        setTimeout(() => {
+                            if (triggersBoss) {
+                                startBossFight();
+                            } else {
+                                // Tiro premio casuale solo se non scatta il boss
+                                const rewardRoll = Math.random() * 100;
+                                const isSpecialVictory = rewardRoll < BASE_REWARD_PROBABILITY;
+
+                                if (isSpecialVictory && REWARD_VIDEOS.length > 0) {
+                                    const totalWeight = REWARD_VIDEOS.reduce((acc, v) => acc + (Number(v.weight) || 0), 0);
+                                    let chosenVideoFile = REWARD_VIDEOS[0].file;
+
+                                    if (totalWeight > 0) {
+                                        const videoRoll = Math.random() * totalWeight;
+                                        let cumulative = 0;
+                                        for (const vid of REWARD_VIDEOS) {
+                                            cumulative += (Number(vid.weight) || 0);
+                                            if (videoRoll <= cumulative) {
+                                                chosenVideoFile = vid.file;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    const videoPath = `assets/${chosenVideoFile}`;
+                                    setSelectedVideo(encodeURI(videoPath));
+                                    setShowReward(true);
+                                    setChestState('closed');
+                                    if (bgMusicRef.current) bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolumeDucked;
+                                } else {
+                                    initGame();
+                                }
+                            }
+                        }, 2500);
+                    }
+                } else if (correctCoords.includes(id)) {
+                    playTone(400, 'sine', 0.2, AUDIO_CONFIG.toneVolume);
+                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong-order' }));
+                    setTimeout(() => {
+                        setFeedbackMap(prev => {
+                            const next = { ...prev };
+                            if (next[id] === 'wrong-order') delete next[id];
+                            return next;
+                        });
+                    }, 600);
+                } else {
+                    playTone(150, 'triangle', 0.3, AUDIO_CONFIG.toneVolume);
+                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong' }));
+                    setTimeout(() => {
+                        setFeedbackMap(prev => {
+                            const next = { ...prev };
+                            if (next[id] === 'wrong') delete next[id];
+                            return next;
+                        });
+                    }, 600);
+                }
+            };
+
+            const handleOpenChest = () => {
+                if (chestState === 'closed') {
+                    setChestState('shaking');
+                    playTone(200, 'square', 0.5, AUDIO_CONFIG.toneVolume);
+                    setTimeout(() => setChestState('ready_to_open'), 1000);
+                }
+            };
+
+            const triggerVideoPlayback = () => {
+                setChestState('open');
+                playRewardSound();
+                if (bgMusicRef.current) bgMusicRef.current.volume = 0;
+            };
+
+            const handleCloseReward = () => {
+                addLog("Chiusura schermata premio.");
+                setShowReward(false);
+                setChestState('closed');
+                setSelectedVideo('');
+                if (bgMusicRef.current) bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolume;
+                initGame();
+            };
+
+            // Sfondo dinamico in base alla modalità
+            const currentBg = !gameStarted
+                ? "url('assets/start_background.jpg')"
+                : isBossMode
+                    ? "url('assets/boss_background.jpg')"
+                    : "url('assets/game_background.jpg')";
+
+            return (
+                <div className="relative min-h-screen flex flex-col justify-between pb-24 select-none">
+                    <div 
+                        className="relative flex flex-col items-center flex-grow p-2 font-sans touch-none overflow-hidden"
+                        style={{ 
+                            backgroundImage: currentBg,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat',
+                            minHeight: '100vh'
+                        }}
+                    >
+                        {/* Overlay Premio con Video a Tutto Schermo */}
+                        {showReward && (
+                            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-indigo-900/95 p-4 animate-in">
+                                {chestState === 'closed' || chestState === 'shaking' ? (
+                                    <React.Fragment>
+                                        <div className="text-yellow-400 text-4xl font-black mb-12 tracking-widest animate-bounce uppercase text-center">PREMIO SPECIALE!</div>
+                                        <div onClick={handleOpenChest} className={`relative cursor-pointer transition-transform ${chestState === 'shaking' ? 'animate-shake' : 'hover:scale-105 active:scale-95'}`}>
+                                            <div className="absolute -inset-8 bg-yellow-400/20 rounded-full blur-3xl animate-pulse"></div>
+                                            <div className="bg-orange-600 w-48 h-40 rounded-xl border-t-8 border-orange-400 border-x-4 shadow-2xl flex items-center justify-center relative overflow-hidden">
+                                                <div className="absolute top-1/2 w-full h-4 bg-orange-800"></div>
+                                                <div className="w-12 h-12 bg-yellow-400 rounded-lg border-4 border-orange-800 z-10"></div>
+                                            </div>
+                                        </div>
+                                        <div className="text-white/60 mt-12 font-bold text-xl animate-pulse uppercase tracking-widest text-center">Tocca il forziere!</div>
+                                    </React.Fragment>
+                                ) : chestState === 'ready_to_open' ? (
+                                    <div className="flex flex-col items-center zoom-in text-center">
+                                        <div className="text-yellow-400 text-4xl font-black mb-12 tracking-widest uppercase">IL FORZIERE È PRONTO!</div>
+                                        <button 
+                                            onClick={triggerVideoPlayback}
+                                            className="bg-green-500 hover:bg-green-600 text-white px-10 py-6 rounded-3xl text-3xl font-black shadow-[0_8px_0_rgb(21,128,61)] active:translate-y-1 active:shadow-none transition-all uppercase tracking-wider animate-pulse"
+                                        >
+                                            Apri il regalo! 🎁
+                                        </button>
+                                    </div>
+                                ) : selectedVideo ? (
+                                    <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center zoom-in">
+                                        <video 
+                                            key={selectedVideo}
+                                            ref={videoRef}
+                                            src={selectedVideo}
+                                            autoPlay
+                                            playsInline
+                                            controls={false}
+                                            onEnded={handleCloseReward}
+                                            onError={() => setTimeout(handleCloseReward, 3000)}
+                                            className="w-full h-full object-contain"
+                                        />
+                                        <button 
+                                            onClick={handleCloseReward}
+                                            className="absolute bottom-8 bg-yellow-400/90 hover:bg-yellow-400 text-indigo-900 px-10 py-4 rounded-2xl text-2xl font-black shadow-[0_5px_0_rgb(202,138,4)] active:translate-y-1 active:shadow-none transition-all uppercase z-10 backdrop-blur-sm border-2 border-yellow-200"
+                                        >
+                                            Avanti!
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="w-full max-w-lg flex flex-col items-center justify-center zoom-in">
+                                        <div className="text-yellow-400 flex gap-4">
+                                            <Icon name="star" size={80} fill="currentColor" className="animate-bounce" />
+                                            <Icon name="star" size={100} fill="currentColor" className="animate-bounce [animation-delay:0.1s]" />
+                                            <Icon name="star" size={80} fill="currentColor" className="animate-bounce [animation-delay:0.2s]" />
+                                        </div>
+                                        <button 
+                                            onClick={handleCloseReward}
+                                            className="mt-8 bg-yellow-400 text-indigo-900 px-10 py-4 rounded-2xl text-2xl font-black shadow-[0_5px_0_rgb(202,138,4)] active:translate-y-1 active:shadow-none transition-all uppercase"
+                                        >
+                                            Avanti!
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ========================================================
+                            SCHERMATA 1: MODALITÀ BOSS FIGHT
+                        ======================================================== */}
+                        {gameStarted && isBossMode ? (
+                            <div className="w-full max-w-md flex flex-col items-center justify-between flex-grow animate-in relative py-2">
+                                
+                                {/* TOP BAR BOSS FIGHT: Stelle, Timer, Punti Vita (Pallini) */}
+                                <div className="w-full flex flex-col gap-2 bg-black/60 backdrop-blur-md rounded-2xl p-3 border-2 border-red-500/60 shadow-2xl">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 bg-yellow-400 text-indigo-950 font-black px-3 py-1 rounded-xl shadow-md text-base">
+                                            <Icon name="star" size={20} fill="currentColor" />
+                                            <span>{totalSolved}</span>
+                                        </div>
+
+                                        <div className="text-red-500 font-black tracking-widest uppercase text-lg animate-pulse flex items-center gap-1">
+                                            <Icon name="skull" size={22} className="stroke-[2.5]" /> BOSS FIGHT!
+                                        </div>
+
+                                        {/* Timer conto alla rovescia */}
+                                        <div className={`flex items-center gap-1 px-3 py-1 rounded-xl font-black text-lg ${bossTimeLeft <= 10 ? 'bg-red-600 text-white animate-bounce' : 'bg-white text-zinc-900'}`}>
+                                            <Icon name="clock" size={18} />
+                                            <span>{bossTimeLeft}s</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Indicatore Punti Vita Boss (Pallini Rossi che diventano Grigi) */}
+                                    <div className="flex items-center justify-center gap-3 pt-1">
+                                        <span className="text-white/80 font-bold text-xs uppercase tracking-wider mr-1">VITA BOSS:</span>
+                                        {Array.from({ length: BOSS_MAX_HP }).map((_, idx) => {
+                                            const isActive = idx < bossHp;
+                                            return (
+                                                <div 
+                                                    key={idx}
+                                                    className={`w-6 h-6 rounded-full transition-all duration-300 border-2 ${
+                                                        isActive 
+                                                            ? 'bg-red-500 border-red-200 shadow-[0_0_12px_rgba(239,68,68,0.9)] scale-110' 
+                                                            : 'bg-zinc-600 border-zinc-500 opacity-40 scale-90'
+                                                    }`}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* ZONA CENTRALE: Avatar Boss + Effetti Visivi Esplosione/Fumo */}
+                                <div className="relative flex-grow flex flex-col items-center justify-center my-4 w-full">
+                                    {/* Bottone per riascoltare la parola */}
+                                    <button 
+                                        onClick={() => speakWordText(bossTargetWord)}
+                                        className="mb-4 bg-white/90 hover:bg-white text-indigo-900 px-6 py-2.5 rounded-full font-black text-lg shadow-lg flex items-center gap-2 border-2 border-indigo-200 active:scale-95 transition-all"
+                                    >
+                                        <Icon name="volume-2" size={26} className="text-indigo-600 animate-pulse" />
+                                        Ascolta ancora!
+                                    </button>
+
+                                    {/* Boss Visivo */}
+                                    <div className="relative w-44 h-44 flex items-center justify-center">
+                                        <div className={`w-36 h-36 bg-gradient-to-br from-red-600 to-zinc-900 rounded-3xl border-4 border-yellow-400 shadow-2xl flex items-center justify-center relative ${bossEffect === 'hit' ? 'animate-shake' : 'animate-pulse'}`}>
+                                            <span className="text-7xl select-none">👾</span>
+                                        </div>
+
+                                        {/* GRAFICA ESPLOSIONE (Colpo a segno) */}
+                                        {bossEffect === 'hit' && (
+                                            <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-explosion">
+                                                <div className="text-8xl select-none">💥</div>
+                                            </div>
+                                        )}
+
+                                        {/* GRAFICA NUVOLA DI FUMO (Errore) */}
+                                        {bossEffect === 'miss' && (
+                                            <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-smoke">
+                                                <div className="text-8xl select-none">💨</div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Schermate di fine Boss */}
+                                    {bossEndState === 'won' && (
+                                        <div className="absolute inset-0 bg-black/80 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center z-40 animate-in p-4 text-center">
+                                            <div className="text-yellow-400 text-4xl font-black mb-2 animate-bounce uppercase">BOSS SCONFITTO!</div>
+                                            <div className="text-white text-3xl font-black flex items-center gap-2 bg-yellow-500/20 px-6 py-3 rounded-2xl border border-yellow-400/40">
+                                                +5 STELLE! <Icon name="star" size={32} fill="#facc15" className="text-yellow-400" />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {bossEndState === 'lost' && (
+                                        <div className="absolute inset-0 bg-black/80 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center z-40 animate-in p-4 text-center">
+                                            <div className="text-red-400 text-3xl font-black mb-2 uppercase">TEMPO SCADUTO!</div>
+                                            <p className="text-white/80 text-xl font-bold">Il boss è scappato... riprova!</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* ZONA INFERIORE: Le 3 opzioni di parole a scelta multipla */}
+                                <div className="w-full flex flex-col gap-3 pb-4">
+                                    <div className="text-center text-white/90 font-extrabold text-sm uppercase tracking-wider drop-shadow-md">
+                                        Tocca la parola che hai ascoltato:
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-3 w-full">
+                                        {bossOptions.map((opt, idx) => (
+                                            <button
+                                                key={idx}
+                                                disabled={isBossLocked || bossEndState !== null}
+                                                onClick={() => handleBossChoice(opt)}
+                                                className="w-full py-4 px-6 bg-white hover:bg-yellow-50 active:bg-yellow-300 text-indigo-950 font-black text-3xl rounded-2xl shadow-[0_6px_0_rgb(199,210,254)] border-2 border-indigo-200 active:translate-y-1 active:shadow-none transition-all uppercase text-center"
+                                            >
+                                                {opt}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Tasto Esci */}
+                                <button 
+                                    onClick={handleExitGame}
+                                    className="absolute bottom-16 right-2 md:bottom-8 bg-red-600/90 text-white p-3 rounded-2xl shadow-lg active:scale-90 z-50 border-b-4 border-red-800 transition-transform"
+                                >
+                                    <Icon name="x" size={24} />
+                                </button>
+                            </div>
+                        ) : gameStarted ? (
+                            /* ========================================================
+                                SCHERMATA 2: MODALITÀ CRUCIPUZZLE ORDINARIA
+                            ======================================================== */
+                            <div className="w-full max-w-md flex flex-col items-center flex-grow">
+                                <div className="w-full flex items-center justify-between mb-2 px-2 bg-white/30 backdrop-blur-sm rounded-2xl p-2 border border-white/20 mt-2">
+                                    <div className="flex items-center gap-1 bg-white px-3 py-1 rounded-xl shadow-sm border-b-2 border-indigo-100">
+                                        <Icon name="star" size={18} className="text-yellow-500" fill="currentColor" />
+                                        <span className="font-black text-indigo-900 text-lg">{totalSolved}</span>
+                                    </div>
+
+                                    {/* Indicatore progresso verso il Boss */}
+                                    <div className="flex-1 mx-3 flex flex-col items-center">
+                                        <div className="text-[11px] font-black text-indigo-900 uppercase tracking-tight flex items-center gap-1">
+                                            <span>Boss tra:</span>
+                                            <span className="bg-red-500 text-white px-2 py-0.2 rounded-full font-black">
+                                                {BOSS_WORDS_INTERVAL - (totalSolved % BOSS_WORDS_INTERVAL)}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white p-1.5 rounded-xl shadow-sm border-b-2 border-indigo-100 text-yellow-500">
+                                        <Icon name="gift" size={20} className="animate-pulse" />
+                                    </div>
+                                </div>
+
+                                <div className="w-full bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-4 mb-4 text-center border-b-4 border-indigo-200">
+                                    <div className="text-indigo-400 uppercase text-[10px] font-black tracking-widest mb-1">Cerca questa parola:</div>
+                                    <div className={`text-5xl font-black tracking-tighter ${found ? 'text-green-500 scale-110' : 'text-indigo-900'} transition-all`}>{currentWord}</div>
+                                </div>
+
+                                <div className="grid gap-1.5 p-2 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border-4 border-white w-full max-w-[450px] aspect-square" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
+                                    {grid.map((row, r) => row.map((char, c) => {
+                                        const id = `${r}-${c}`;
+                                        const status = feedbackMap[id];
+                                        let cellClass = "bg-white text-indigo-800 border-indigo-100";
+                                        if (status === 'correct') cellClass = "bg-green-500 text-white shadow-inner scale-95 border-green-600";
+                                        if (status === 'wrong') cellClass = "bg-red-500 text-white animate-shake border-red-600";
+                                        if (status === 'wrong-order') cellClass = "bg-yellow-400 text-indigo-950 animate-shake border-yellow-500 font-extrabold shadow-md";
+                                        return (
+                                            <button key={id} onClick={() => handleCellClick(r, c)} className={`flex items-center justify-center text-2xl sm:text-3xl font-black rounded-lg transition-all duration-200 aspect-square border-b-2 ${cellClass} ${!status ? 'hover:bg-indigo-50 active:bg-indigo-200' : ''}`}>{char}</button>
+                                        );
+                                    }))}
+                                </div>
+
+                                <div className="mt-4 h-12 flex items-center justify-center">
+                                    {found && (
+                                        <div className="flex items-center gap-2 text-green-600 bg-white/90 backdrop-blur-md px-6 py-2 rounded-full font-black text-2xl shadow-lg border-b-4 border-green-200 animate-bounce">
+                                            <Icon name="check-circle-2" size={32} className="stroke-[3]" /> BRAVO!
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button 
+                                    onClick={handleExitGame}
+                                    className="absolute bottom-16 right-4 md:bottom-8 bg-red-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 z-50 border-b-4 border-red-800 transition-transform"
+                                >
+                                    <Icon name="x" size={24} />
+                                </button>
+                            </div>
+                        ) : (
+                            /* ========================================================
+                                SCHERMATA 3: MENU INIZIALE
+                            ======================================================== */
+                            <div className="flex flex-col items-center justify-center flex-grow text-center">
+                                <div className="bg-white/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl max-w-sm border-b-8 border-indigo-200">
+                                    <div className="flex justify-center mb-4 text-yellow-400">
+                                        <Icon name="star" size={48} fill="currentColor" />
+                                    </div>
+                                    <h1 className="text-4xl font-black text-indigo-900 mb-2 tracking-tight uppercase">CRUCITOILET!</h1>
+                                    <p className="text-lg text-indigo-600 mb-0.5 font-medium italic">Il gioco delle super parole</p>
+                                    <p className="text-xs text-indigo-400 mb-8 font-normal italic">{VERSION}</p>
+                                    <button onClick={handleStartGame} className="w-full bg-yellow-400 text-indigo-900 px-8 py-5 rounded-2xl text-3xl font-black shadow-[0_6px_0_rgb(202,138,4)] active:translate-y-1 active:shadow-none transition-all tracking-tighter uppercase">Gioca!</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* PANNELLO DI DEBUG */}
+                    {DEBUG_MODE && (
+                        <div className="fixed bottom-0 left-0 right-0 z-[200] bg-zinc-900 text-zinc-300 font-mono text-xs border-t-4 border-red-500 shadow-2xl transition-all duration-300" style={{ height: isConsoleOpen ? '180px' : '30px' }}>
+                            <div className="flex items-center justify-between bg-zinc-800 px-4 py-1 border-b border-zinc-700">
+                                <span className="font-bold text-red-400 flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                    DEBUGGER MOBILE
+                                </span>
+                                <div className="flex gap-2">
+                                    <button onClick={startBossFight} className="bg-red-700 hover:bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                                        Test Boss Fight
+                                    </button>
+                                    <button onClick={() => setDebugLogs([])} className="bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-2 py-0.5 rounded text-[10px]">
+                                        Pulisci
+                                    </button>
+                                    <button onClick={() => setIsConsoleOpen(!isConsoleOpen)} className="bg-zinc-700 text-white px-3 py-0.5 rounded font-bold">
+                                        {isConsoleOpen ? 'Riduci' : 'Espandi'}
+                                    </button>
+                                </div>
+                            </div>
+                            {isConsoleOpen && (
+                                <div className="p-2 overflow-y-auto h-[145px] flex flex-col-reverse gap-1 select-text">
+                                    {debugLogs.length === 0 ? (
+                                        <div className="text-zinc-500 italic">Nessun log registrato.</div>
+                                    ) : (
+                                        debugLogs.map((log, index) => {
+                                            let color = "text-zinc-300";
+                                            if (log.type === "error") color = "text-red-400 font-bold";
+                                            if (log.type === "warning") color = "text-yellow-400";
+                                            if (log.type === "success") color = "text-green-400 font-bold";
+                                            return (
+                                                <div key={index} className={`border-b border-zinc-800/50 pb-0.5 leading-tight ${color}`}>
+                                                    <span className="text-zinc-500 mr-2">[{log.timestamp}]</span>
+                                                    {log.msg}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
