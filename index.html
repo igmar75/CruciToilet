@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -38,6 +39,20 @@
         .zoom-in { animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
         @keyframes zoomIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+        @keyframes explosion {
+            0% { transform: scale(0.3); opacity: 0; filter: brightness(2); }
+            50% { transform: scale(1.3); opacity: 1; filter: brightness(1.5); }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .animate-explosion { animation: explosion 0.7s ease-out forwards; }
+
+        @keyframes smoke {
+            0% { transform: scale(0.4) translateY(20px); opacity: 0; }
+            40% { transform: scale(1.1) translateY(-10px); opacity: 0.9; }
+            100% { transform: scale(1.4) translateY(-40px); opacity: 0; }
+        }
+        .animate-smoke { animation: smoke 0.8s ease-out forwards; }
+
         body { 
             overscroll-behavior: none; 
             -webkit-tap-highlight-color: transparent;
@@ -61,38 +76,46 @@
         // ==========================================
         //         CONFIGURAZIONE DI BASE DEL GIOCO
         // ==========================================
-        const DEBUG_MODE = false; // Imposta a false per nascondere il pannello di debug in fondo ad attività ultimata
-        const VERSION = "Ver 1.7"; // Versione del gioco visibile nella schermata iniziale
-        const GRID_SIZE = 8;       // Dimensione della griglia (es. 8 = 8x8)
+        const DEBUG_MODE = false;         // Imposta a false per nascondere il pannello di debug
+        const VERSION = "Ver 1.7";        // Versione del gioco
+        const GRID_SIZE = 8;              // Dimensione della griglia del crucipuzzle (8x8)
 
-        // Probabilità base (in %) di ricevere il forziere a fine parola (es. 25 = 25% di possibilità)
-        const BASE_REWARD_PROBABILITY = 5; 
+        // ==========================================
+        //         PARAMETRI DELLA MODALITÀ BOSS
+        // ==========================================
+        const BOSS_WORDS_INTERVAL = 5;    // Ogni quante parole scatta la Boss Fight (es. 5)
+        const BOSS_MAX_HP = 3;            // Punti vita del Boss (es. 3 o 5)
+        const BOSS_TIME_LIMIT = 30;       // Secondi massimi per sconfiggere il Boss
+
+        // Probabilità base (in %) di ricevere il forziere a fine parola ordinaria (es. 25 = 25%)
+        const BASE_REWARD_PROBABILITY = 25; 
 
         // ==========================================
         //         ELENCO DEI VIDEO PREMIO CON PESO/PROBABILITÀ
         // ==========================================
-        // I video devono risiedere direttamente dentro la cartella "assets/".
-        // Il campo "weight" rappresenta la frequenza relativa/probabilità (es. 0 - 100).
         const REWARD_VIDEOS = [
-            { file: "skibidi_toilet_web.mp4", weight: 1 },
-            { file: "skibidi_toilet_gigante_web.mp4", weight: 1 },
-            { file: "Skibidi_67.mp4", weight: 1 },
-            { file: "Skibidi_CocaCola.mp4", weight: 1 },
-            { file: "Skibidi_Elia.mp4", weight: 1 },
-            { file: "Skibidi_Minecraft1.mp4", weight: 1 },
-            { file: "Skibidi_Minecraft2.mp4", weight: 1 },
-            { file: "skibidi toilet verity 3.mp4", weight: 93 }
+            { file: "skibidi_toilet_web.mp4", weight: 30 },
+            { file: "skibidi_toilet_gigante_web.mp4", weight: 20 },
+            { file: "Skibidi_67.mp4", weight: 15 },
+            { file: "Skibidi_CocaCola.mp4", weight: 15 },
+            { file: "Skibidi_Elia.mp4", weight: 35 },
+            { file: "Skibidi_Minecraft1.mp4", weight: 20 },
+            { file: "Skibidi_Minecraft2.mp4", weight: 20 },
+            { file: "skibidi toilet verity 3.mp4", weight: 10 }
         ];
 
         const AUDIO_CONFIG = {
-            bgMusicVolume: 0.1,       // Volume normale musica di sottofondo (0.0 - 1.0)
+            bgMusicVolume: 0.1,        // Volume normale musica di sottofondo (0.0 - 1.0)
+            bossMusicVolume: 0.25,     // Volume musica Boss Fight (0.0 - 1.0)
             bgMusicVolumeDucked: 0.05, // Volume musica ridotto durante la schermata del forziere (0.0 - 1.0)
-            toneVolume: 0.4,          // Volume dei suoni dei tasti e della scossa del forziere (0.0 - 1.0)
-            rewardToneVolume: 0.05,   // Volume della melodia iniziale del forziere (0.0 - 1.0)
-            speechVolume: 1.0,        // Volume della voce che legge le parole (0.0 - 1.0)
-            speechRate: 0.7,          // Velocità della voce che legge le parole (più basso = più lento)
-            victoryVolume: 0.5,       // Volume del jingle MP3 di vittoria (0.0 - 1.0)
-            videoVolume: 0.3          // Volume del video premio (0.0 - 1.0)
+            toneVolume: 0.4,           // Volume suoni ed effetti standard (0.0 - 1.0)
+            rewardToneVolume: 0.05,    // Volume melodia iniziale del forziere (0.0 - 1.0)
+            speechVolume: 1.0,         // Volume voce che legge le parole (0.0 - 1.0)
+            speechRate: 0.7,           // Velocità della voce (0.7 = scandita e rilassata)
+            victoryVolume: 0.5,        // Volume MP3 di vittoria (0.0 - 1.0)
+            videoVolume: 0.3,          // Volume video premio (0.0 - 1.0)
+            bossHitVolume: 0.6,        // Volume colpo a segno sul boss (0.0 - 1.0)
+            bossMissVolume: 0.5        // Volume errore sul boss (0.0 - 1.0)
         };
 
         const { useState, useEffect, useCallback, useRef } = React;
@@ -132,12 +155,25 @@
             const [chestState, setChestState] = useState('closed'); // 'closed', 'shaking', 'ready_to_open', 'open'
             const [selectedVideo, setSelectedVideo] = useState('');
             
+            // --- STATI DELLA MODALITÀ BOSS ---
+            const [isBossMode, setIsBossMode] = useState(false);
+            const [bossHp, setBossHp] = useState(BOSS_MAX_HP);
+            const [bossTimeLeft, setBossTimeLeft] = useState(BOSS_TIME_LIMIT);
+            const [bossTargetWord, setBossTargetWord] = useState('');
+            const [bossOptions, setBossOptions] = useState([]);
+            const [bossEffect, setBossEffect] = useState(null); // 'hit', 'miss', null
+            const [bossEndState, setBossEndState] = useState(null); // 'won', 'lost', null
+            const [isBossLocked, setIsBossLocked] = useState(false);
+
             const [debugLogs, setDebugLogs] = useState([]);
             const [isConsoleOpen, setIsConsoleOpen] = useState(true);
 
             const speechIntervalRef = useRef(null);
+            const bossSpeechIntervalRef = useRef(null);
+            const bossTimerRef = useRef(null);
             const audioCtxRef = useRef(null);
             const bgMusicRef = useRef(null);
+            const bossMusicRef = useRef(null);
             const videoRef = useRef(null);
 
             const addLog = useCallback((msg, type = "info") => {
@@ -154,20 +190,25 @@
                 return () => window.removeEventListener('error', handleError);
             }, [addLog]);
 
+            // Inizializzazione audio di sottofondo
             useEffect(() => {
                 bgMusicRef.current = new Audio('audio/background_music.mp3');
                 bgMusicRef.current.loop = true;
                 bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolume;
-                addLog("File audio/background_music.mp3 istanziato.");
+
+                bossMusicRef.current = new Audio('audio/boss_music.mp3');
+                bossMusicRef.current.loop = true;
+                bossMusicRef.current.volume = AUDIO_CONFIG.bossMusicVolume;
+
+                addLog("File audio di sottofondo caricati.");
 
                 return () => {
-                    if (bgMusicRef.current) {
-                        bgMusicRef.current.pause();
-                        bgMusicRef.current = null;
-                    }
+                    if (bgMusicRef.current) bgMusicRef.current.pause();
+                    if (bossMusicRef.current) bossMusicRef.current.pause();
                 };
             }, [addLog]);
 
+            // Caricamento elenco parole
             useEffect(() => {
                 const loadWords = async () => {
                     try {
@@ -192,34 +233,30 @@
                 loadWords();
             }, [addLog]);
 
-            // Effetto che gestisce il caricamento e la riproduzione del video in modo robusto
+            // Gestione video a tutto schermo
             useEffect(() => {
                 if (videoRef.current && showReward && chestState === 'open' && selectedVideo) {
                     addLog(`Inizializzazione riproduzione video: ${selectedVideo}`);
                     videoRef.current.volume = AUDIO_CONFIG.videoVolume;
                     
                     try {
-                        // Forza il caricamento dell'URL direttamente associato al tag video
                         videoRef.current.load();
-                        
                         const playPromise = videoRef.current.play();
                         if (playPromise !== undefined) {
                             playPromise
-                                .then(() => {
-                                    addLog("Riproduzione video avviata con successo.", "success");
-                                })
+                                .then(() => addLog("Riproduzione video avviata con successo.", "success"))
                                 .catch(error => {
-                                    addLog(`Play bloccato: ${error.message}. Tento riproduzione silenziosa di emergenza...`, "warning");
+                                    addLog(`Play bloccato: ${error.message}. Tento riproduzione mutata...`, "warning");
                                     if (videoRef.current) {
                                         videoRef.current.muted = true;
                                         videoRef.current.play()
-                                            .then(() => addLog("Riproduzione forzata avviata (SILENZIATA).", "success"))
-                                            .catch(err => addLog(`Play fallito definitivamente: ${err.message}`, "error"));
+                                            .then(() => addLog("Riproduzione forzata avviata.", "success"))
+                                            .catch(err => addLog(`Play fallito: ${err.message}`, "error"));
                                     }
                                 });
                         }
                     } catch (e) {
-                        addLog(`Errore sincrono durate il setup del video: ${e.message}`, "error");
+                        addLog(`Errore setup video: ${e.message}`, "error");
                     }
                 }
             }, [showReward, chestState, selectedVideo, addLog]);
@@ -244,6 +281,16 @@
                 } catch (e) {}
             };
 
+            const playAudioFile = (path, volume = 0.5) => {
+                try {
+                    const sound = new Audio(path);
+                    sound.volume = volume;
+                    sound.play().catch(e => addLog(`Errore riproduzione ${path}: ${e.message}`, "warning"));
+                } catch (e) {
+                    addLog(`Eccezione audio per ${path}: ${e.message}`, "error");
+                }
+            };
+
             const playRewardSound = () => {
                 const tones = [523.25, 659.25, 783.99, 1046.50];
                 tones.forEach((t, i) => {
@@ -251,448 +298,33 @@
                 });
             };
 
-            const initGame = useCallback((forceNextCase = null) => {
-                if (words.length === 0) return;
-                const nextCase = forceNextCase !== null ? forceNextCase : !isUppercase;
-                setIsUppercase(nextCase);
-                const word = words[Math.floor(Math.random() * words.length)];
-                const displayWord = nextCase ? word.toUpperCase() : word.toLowerCase();
-                setCurrentWord(displayWord);
-                setFound(false);
-                setFoundCount(0);
-                setFeedbackMap({});
-                
-                let newGrid = Array(GRID_SIZE).fill(null).map(() => 
-                    Array(GRID_SIZE).fill(null).map(() => {
-                        const charCode = Math.floor(Math.random() * 26) + (nextCase ? 65 : 97);
-                        return String.fromCharCode(charCode);
-                    })
-                );
-
-                const row = Math.floor(Math.random() * GRID_SIZE);
-                const startCol = Math.floor(Math.random() * (GRID_SIZE - word.length + 1));
-                const coords = [];
-                for (let i = 0; i < word.length; i++) {
-                    newGrid[row][startCol + i] = displayWord[i];
-                    coords.push(`${row}-${startCol + i}`);
-                }
-                setGrid(newGrid);
-                setCorrectCoords(coords);
-            }, [isUppercase, words, addLog]);
+            // Pronuncia parola con sintesi vocale
+            const speakWordText = (wordToSpeak) => {
+                if (!wordToSpeak) return;
+                try {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(wordToSpeak.toLowerCase());
+                    utterance.lang = 'it-IT';
+                    utterance.rate = AUDIO_CONFIG.speechRate; 
+                    utterance.volume = AUDIO_CONFIG.speechVolume;
+                    window.speechSynthesis.speak(utterance);
+                } catch (e) {}
+            };
 
             const speakWord = useCallback(() => {
-                if (!currentWord || found || !gameStarted || showReward) return;
-                const utterance = new SpeechSynthesisUtterance(currentWord.toLowerCase());
-                utterance.lang = 'it-IT';
-                utterance.rate = AUDIO_CONFIG.speechRate; 
-                utterance.volume = AUDIO_CONFIG.speechVolume;
-                window.speechSynthesis.speak(utterance);
-            }, [currentWord, found, gameStarted, showReward]);
+                if (!currentWord || found || !gameStarted || showReward || isBossMode) return;
+                speakWordText(currentWord);
+            }, [currentWord, found, gameStarted, showReward, isBossMode]);
 
             useEffect(() => {
-                if (gameStarted && !found && !showReward) {
+                if (gameStarted && !found && !showReward && !isBossMode) {
                     speakWord();
                     speechIntervalRef.current = setInterval(speakWord, 4000);
                 } else {
                     clearInterval(speechIntervalRef.current);
                 }
                 return () => clearInterval(speechIntervalRef.current);
-            }, [gameStarted, found, speakWord, showReward]);
+            }, [gameStarted, found, speakWord, showReward, isBossMode]);
 
-            const handleStartGame = () => {
-                setGameStarted(true);
-                initGame(true);
-                addLog("Partita avviata dall'utente.");
-                if (bgMusicRef.current) {
-                    bgMusicRef.current.play()
-                        .catch(e => addLog(`Musica bloccata dal browser: ${e.message}`, "warning"));
-                }
-            };
-
-            const handleExitGame = () => {
-                window.speechSynthesis.cancel();
-                if (speechIntervalRef.current) {
-                    clearInterval(speechIntervalRef.current);
-                }
-                if (bgMusicRef.current) {
-                    bgMusicRef.current.pause();
-                    bgMusicRef.current.currentTime = 0;
-                }
-                setGameStarted(false);
-                setShowReward(false);
-                setFound(false);
-            };
-
-            const handleCellClick = (r, c) => {
-                if (found || showReward) return;
-                const id = `${r}-${c}`;
-
-                // Se la cella è già stata indovinata correttamente, non fare nulla
-                if (feedbackMap[id] === 'correct') return;
-
-                // Coordinata della lettera che ci si aspetta in ordine
-                const expectedId = correctCoords[foundCount];
-
-                if (id === expectedId) {
-                    // Lettera corretta in ordine sequenziale
-                    playTone(660, 'sine', 0.15, AUDIO_CONFIG.toneVolume);
-                    const newFeedback = { ...feedbackMap, [id]: 'correct' };
-                    setFeedbackMap(newFeedback);
-                    const newCount = foundCount + 1;
-                    setFoundCount(newCount);
-
-                    if (newCount === correctCoords.length) {
-                        setFound(true);
-                        const nextTotal = totalSolved + 1;
-                        setTotalSolved(nextTotal);
-                        addLog(`Parola completata! Totale completate: ${nextTotal}`);
-                        
-                        setTimeout(() => playTone(523, 'sine', 0.2, AUDIO_CONFIG.toneVolume), 100);
-                        setTimeout(() => playTone(783, 'sine', 0.4, AUDIO_CONFIG.toneVolume), 300);
-
-                        // --- ESTRAZIONE A 2 PASSI ---
-                        // 1° Tiro: Controllo se si vince il forziere premio
-                        const rewardRoll = Math.random() * 100;
-                        const isSpecialVictory = rewardRoll < BASE_REWARD_PROBABILITY;
-                        addLog(`Tiro premio: ${rewardRoll.toFixed(1)} / Soglia: ${BASE_REWARD_PROBABILITY}% -> Premio: ${isSpecialVictory ? 'SÌ' : 'NO'}`);
-
-                        const soundPath = isSpecialVictory ? 'audio/super_victory.mp3' : 'audio/victory.mp3';
-
-                        const victoryAudio = new Audio(soundPath);
-                        victoryAudio.volume = AUDIO_CONFIG.victoryVolume;
-                        victoryAudio.play()
-                            .catch(() => {
-                                const winSound = new SpeechSynthesisUtterance("Urrà!");
-                                winSound.lang = 'it-IT';
-                                winSound.pitch = 1.3;
-                                winSound.volume = AUDIO_CONFIG.speechVolume;
-                                window.speechSynthesis.speak(winSound);
-                            });
-
-                        setTimeout(() => {
-                            if (isSpecialVictory) {
-                                // 2° Tiro: Selezione ponderata del video in base ai pesi
-                                if (REWARD_VIDEOS.length > 0) {
-                                    const totalWeight = REWARD_VIDEOS.reduce((acc, v) => acc + (Number(v.weight) || 0), 0);
-                                    let chosenVideoFile = REWARD_VIDEOS[0].file;
-
-                                    if (totalWeight > 0) {
-                                        const videoRoll = Math.random() * totalWeight;
-                                        let cumulative = 0;
-                                        for (const vid of REWARD_VIDEOS) {
-                                            cumulative += (Number(vid.weight) || 0);
-                                            if (videoRoll <= cumulative) {
-                                                chosenVideoFile = vid.file;
-                                                break;
-                                            }
-                                        }
-                                        addLog(`Tiro video: ${videoRoll.toFixed(1)} / Totale peso: ${totalWeight} -> Scelto: ${chosenVideoFile}`);
-                                    } else {
-                                        chosenVideoFile = REWARD_VIDEOS[Math.floor(Math.random() * REWARD_VIDEOS.length)].file;
-                                    }
-
-                                    const videoPath = `assets/${chosenVideoFile}`;
-                                    setSelectedVideo(encodeURI(videoPath));
-                                }
-                                setShowReward(true);
-                                setChestState('closed');
-                                if (bgMusicRef.current) bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolumeDucked;
-                            } else {
-                                initGame();
-                            }
-                        }, 3000);
-                    }
-                } else if (correctCoords.includes(id)) {
-                    // La lettera fa parte della parola MA non è quella nel turno giusto -> Feedback Giallo
-                    playTone(400, 'sine', 0.2, AUDIO_CONFIG.toneVolume);
-                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong-order' }));
-                    setTimeout(() => {
-                        setFeedbackMap(prev => {
-                            const next = { ...prev };
-                            if (next[id] === 'wrong-order') delete next[id];
-                            return next;
-                        });
-                    }, 600);
-                } else {
-                    // Lettera completamente sbagliata -> Feedback Rosso
-                    playTone(150, 'triangle', 0.3, AUDIO_CONFIG.toneVolume);
-                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong' }));
-                    setTimeout(() => {
-                        setFeedbackMap(prev => {
-                            const next = { ...prev };
-                            if (next[id] === 'wrong') delete next[id];
-                            return next;
-                        });
-                    }, 600);
-                }
-            };
-
-            const handleOpenChest = () => {
-                if (chestState === 'closed') {
-                    setChestState('shaking');
-                    playTone(200, 'square', 0.5, AUDIO_CONFIG.toneVolume);
-                    setTimeout(() => {
-                        setChestState('ready_to_open');
-                    }, 1000);
-                }
-            };
-
-            const triggerVideoPlayback = () => {
-                setChestState('open');
-                playRewardSound();
-                if (bgMusicRef.current) bgMusicRef.current.volume = 0;
-            };
-
-            const handleCloseReward = () => {
-                addLog("Chiusura schermata premio.");
-                setShowReward(false);
-                setChestState('closed');
-                setSelectedVideo('');
-                if (bgMusicRef.current) {
-                    bgMusicRef.current.volume = AUDIO_CONFIG.bgMusicVolume;
-                }
-                initGame();
-            };
-
-            const loadTestVideo = () => {
-                const testUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-                addLog(`Forzatura video di test: ${testUrl}`, "warning");
-                setSelectedVideo(testUrl);
-                setChestState('open');
-            };
-
-            const checkFileExistence = async () => {
-                const firstVideo = REWARD_VIDEOS[0]?.file || REWARD_VIDEOS[0];
-                const videoPath = `assets/${firstVideo}`;
-                addLog(`Verifica esistenza: ${videoPath}...`);
-                try {
-                    const response = await fetch(videoPath, { method: 'HEAD' });
-                    if (response.ok) {
-                        addLog("FILE TROVATO! Il server risponde OK.", "success");
-                    } else {
-                        addLog(`ERRORE 404: Il file non esiste sul server. Controlla il nome o l'upload su GitHub. Status: ${response.status}`, "error");
-                    }
-                } catch (e) {
-                    addLog(`Errore di rete durante la verifica: ${e.message}`, "error");
-                }
-            };
-
-            return (
-                <div className="relative min-h-screen flex flex-col justify-between pb-24 select-none">
-                    <div 
-                        className="relative flex flex-col items-center flex-grow p-2 font-sans touch-none overflow-hidden"
-                        style={{ 
-                            backgroundImage: gameStarted ? "url('assets/game_background.jpg')" : "url('assets/start_background.jpg')",
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            backgroundRepeat: 'no-repeat',
-                            minHeight: '100vh'
-                        }}
-                    >
-                        {/* Overlay Premio con Video */}
-                        {showReward && (
-                            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-indigo-900/95 p-4 animate-in">
-                                {chestState === 'closed' || chestState === 'shaking' ? (
-                                    <React.Fragment>
-                                        <div className="text-yellow-400 text-4xl font-black mb-12 tracking-widest animate-bounce uppercase text-center">PREMIO SPECIALE!</div>
-                                        <div onClick={handleOpenChest} className={`relative cursor-pointer transition-transform ${chestState === 'shaking' ? 'animate-shake' : 'hover:scale-105 active:scale-95'}`}>
-                                            <div className="absolute -inset-8 bg-yellow-400/20 rounded-full blur-3xl animate-pulse"></div>
-                                            <div className="bg-orange-600 w-48 h-40 rounded-xl border-t-8 border-orange-400 border-x-4 shadow-2xl flex items-center justify-center relative overflow-hidden">
-                                                <div className="absolute top-1/2 w-full h-4 bg-orange-800"></div>
-                                                <div className="w-12 h-12 bg-yellow-400 rounded-lg border-4 border-orange-800 z-10"></div>
-                                            </div>
-                                        </div>
-                                        <div className="text-white/60 mt-12 font-bold text-xl animate-pulse uppercase tracking-widest text-center">Tocca il forziere!</div>
-                                    </React.Fragment>
-                                ) : chestState === 'ready_to_open' ? (
-                                    <div className="flex flex-col items-center zoom-in text-center">
-                                        <div className="text-yellow-400 text-4xl font-black mb-12 tracking-widest uppercase">IL FORZIERE È PRONTO!</div>
-                                        <button 
-                                            onClick={triggerVideoPlayback}
-                                            className="bg-green-500 hover:bg-green-600 text-white px-10 py-6 rounded-3xl text-3xl font-black shadow-[0_8px_0_rgb(21,128,61)] active:translate-y-1 active:shadow-none transition-all uppercase tracking-wider animate-pulse"
-                                        >
-                                            Apri il regalo! 🎁
-                                        </button>
-                                    </div>
-                                ) : selectedVideo ? (
-                                    // NUOVA MODALITA': Video Fullscreen
-                                    <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center zoom-in">
-                                        <video 
-                                            key={selectedVideo}
-                                            ref={videoRef}
-                                            src={selectedVideo}
-                                            autoPlay
-                                            playsInline
-                                            controls={false}
-                                            onEnded={handleCloseReward}
-                                            onPlay={() => {
-                                                addLog("Evento video: PLAY iniziato.");
-                                            }}
-                                            onError={(e) => {
-                                                const videoEl = videoRef.current;
-                                                const videoErr = videoEl?.error;
-                                                const netState = videoEl?.networkState;
-                                                const rdyState = videoEl?.readyState;
-                                                
-                                                let errStr = "Sconosciuto";
-                                                if (videoErr) {
-                                                    if (videoErr.code === 1) errStr = "ABORTED (Caricamento interrotto)";
-                                                    if (videoErr.code === 2) errStr = "NETWORK (Errore di rete/404)";
-                                                    if (videoErr.code === 3) errStr = "DECODE (Errore decodifica codec)";
-                                                    if (videoErr.code === 4) errStr = "SRC_NOT_SUPPORTED (Formato o percorso non valido)";
-                                                }
-                                                
-                                                addLog(`Errore video: ${errStr} [Codice ${videoErr ? videoErr.code : '?'}] (NetworkState: ${netState}, ReadyState: ${rdyState})`, "error");
-                                                addLog(`Sorgente tentata: ${videoEl?.currentSrc || selectedVideo}`, "error");
-                                                
-                                                // Sblocca il gioco dopo 3 secondi in caso di fallimento
-                                                setTimeout(handleCloseReward, 3000);
-                                            }}
-                                            className="w-full h-full object-contain"
-                                        />
-                                        <button 
-                                            onClick={handleCloseReward}
-                                            className="absolute bottom-8 bg-yellow-400/90 hover:bg-yellow-400 text-indigo-900 px-10 py-4 rounded-2xl text-2xl font-black shadow-[0_5px_0_rgb(202,138,4)] active:translate-y-1 active:shadow-none transition-all uppercase z-10 backdrop-blur-sm border-2 border-yellow-200"
-                                        >
-                                            Avanti!
-                                        </button>
-                                    </div>
-                                ) : (
-                                    // Fallback (solo se i video non sono configurati)
-                                    <div className="w-full max-w-lg flex flex-col items-center justify-center zoom-in">
-                                        <div className="text-yellow-400 flex gap-4">
-                                            <Icon name="star" size={80} fill="currentColor" className="animate-bounce" />
-                                            <Icon name="star" size={100} fill="currentColor" className="animate-bounce [animation-delay:0.1s]" />
-                                            <Icon name="star" size={80} fill="currentColor" className="animate-bounce [animation-delay:0.2s]" />
-                                        </div>
-                                        <button 
-                                            onClick={handleCloseReward}
-                                            className="mt-8 bg-yellow-400 text-indigo-900 px-10 py-4 rounded-2xl text-2xl font-black shadow-[0_5px_0_rgb(202,138,4)] active:translate-y-1 active:shadow-none transition-all uppercase"
-                                        >
-                                            Avanti!
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {gameStarted ? (
-                            <div className="w-full max-w-md flex flex-col items-center flex-grow">
-                                <div className="w-full flex items-center justify-between mb-2 px-2 bg-white/30 backdrop-blur-sm rounded-2xl p-2 border border-white/20 mt-2">
-                                    <div className="flex items-center gap-1 bg-white px-3 py-1 rounded-xl shadow-sm border-b-2 border-indigo-100">
-                                        <Icon name="star" size={18} className="text-yellow-500" fill="currentColor" />
-                                        <span className="font-black text-indigo-900 text-lg">{totalSolved}</span>
-                                    </div>
-                                    <div className="flex-1 mx-3 flex items-center justify-center">
-                                        <span className="text-indigo-900 font-extrabold text-sm tracking-wide bg-white/60 px-3 py-1 rounded-full border border-white/40 shadow-sm flex items-center gap-1">
-                                            🎁 Sorpresa possibile!
-                                        </span>
-                                    </div>
-                                    <div className="bg-white p-1.5 rounded-xl shadow-sm border-b-2 border-indigo-100 text-yellow-500">
-                                        <Icon name="gift" size={20} className="animate-pulse" />
-                                    </div>
-                                </div>
-
-                                <div className="w-full bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-4 mb-4 text-center border-b-4 border-indigo-200">
-                                    <div className="text-indigo-400 uppercase text-[10px] font-black tracking-widest mb-1">Cerca questa parola:</div>
-                                    <div className={`text-5xl font-black tracking-tighter ${found ? 'text-green-500 scale-110' : 'text-indigo-900'} transition-all`}>{currentWord}</div>
-                                </div>
-
-                                <div className="grid gap-1.5 p-2 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border-4 border-white w-full max-w-[450px] aspect-square" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
-                                    {grid.map((row, r) => row.map((char, c) => {
-                                        const id = `${r}-${c}`;
-                                        const status = feedbackMap[id];
-                                        let cellClass = "bg-white text-indigo-800 border-indigo-100";
-                                        if (status === 'correct') cellClass = "bg-green-500 text-white shadow-inner scale-95 border-green-600";
-                                        if (status === 'wrong') cellClass = "bg-red-500 text-white animate-shake border-red-600";
-                                        if (status === 'wrong-order') cellClass = "bg-yellow-400 text-indigo-950 animate-shake border-yellow-500 font-extrabold shadow-md";
-                                        return (
-                                            <button key={id} onClick={() => handleCellClick(r, c)} className={`flex items-center justify-center text-2xl sm:text-3xl font-black rounded-lg transition-all duration-200 aspect-square border-b-2 ${cellClass} ${!status ? 'hover:bg-indigo-50 active:bg-indigo-200' : ''}`}>{char}</button>
-                                        );
-                                    }))}
-                                </div>
-
-                                <div className="mt-4 h-12 flex items-center justify-center">
-                                    {found && (
-                                        <div className="flex items-center gap-2 text-green-600 bg-white/90 backdrop-blur-md px-6 py-2 rounded-full font-black text-2xl shadow-lg border-b-4 border-green-200 animate-bounce">
-                                            <Icon name="check-circle-2" size={32} className="stroke-[3]" /> BRAVO!
-                                        </div>
-                                    )}
-                                </div>
-
-                                <button 
-                                    onClick={handleExitGame}
-                                    className="absolute bottom-16 right-4 md:bottom-8 bg-red-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 z-50 border-b-4 border-red-800 transition-transform"
-                                >
-                                    <Icon name="x" size={24} />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center flex-grow text-center">
-                                <div className="bg-white/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl max-w-sm border-b-8 border-indigo-200">
-                                    <div className="flex justify-center mb-4 text-yellow-400">
-                                        <Icon name="star" size={48} fill="currentColor" />
-                                    </div>
-                                    <h1 className="text-4xl font-black text-indigo-900 mb-2 tracking-tight uppercase">CRUCITOILET!</h1>
-                                    <p className="text-lg text-indigo-600 mb-0.5 font-medium italic">Il gioco delle super parole</p>
-                                    <p className="text-xs text-indigo-400 mb-8 font-normal italic">{VERSION}</p>
-                                    <button onClick={handleStartGame} className="w-full bg-yellow-400 text-indigo-900 px-8 py-5 rounded-2xl text-3xl font-black shadow-[0_6px_0_rgb(202,138,4)] active:translate-y-1 active:shadow-none transition-all tracking-tighter uppercase">Gioca!</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* PANNELLO DI DEBUG */}
-                    {DEBUG_MODE && (
-                        <div className="fixed bottom-0 left-0 right-0 z-[200] bg-zinc-900 text-zinc-300 font-mono text-xs border-t-4 border-red-500 shadow-2xl transition-all duration-300" style={{ height: isConsoleOpen ? '180px' : '30px' }}>
-                            <div className="flex items-center justify-between bg-zinc-800 px-4 py-1 border-b border-zinc-700">
-                                <span className="font-bold text-red-400 flex items-center gap-1">
-                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                    DEBUGGER MOBILE
-                                </span>
-                                <div className="flex gap-2">
-                                    <button onClick={checkFileExistence} className="bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                                        Test Esistenza File
-                                    </button>
-                                    <button onClick={loadTestVideo} className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                                        Test Video Pubblico
-                                    </button>
-                                    <button onClick={() => setDebugLogs([])} className="bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-2 py-0.5 rounded text-[10px]">
-                                        Pulisci
-                                    </button>
-                                    <button onClick={() => setIsConsoleOpen(!isConsoleOpen)} className="bg-zinc-700 text-white px-3 py-0.5 rounded font-bold">
-                                        {isConsoleOpen ? 'Riduci' : 'Espandi'}
-                                    </button>
-                                </div>
-                            </div>
-                            {isConsoleOpen && (
-                                <div className="p-2 overflow-y-auto h-[145px] flex flex-col-reverse gap-1 select-text">
-                                    {debugLogs.length === 0 ? (
-                                        <div className="text-zinc-500 italic">Nessun log registrato.</div>
-                                    ) : (
-                                        debugLogs.map((log, index) => {
-                                            let color = "text-zinc-300";
-                                            if (log.type === "error") color = "text-red-400 font-bold";
-                                            if (log.type === "warning") color = "text-yellow-400";
-                                            if (log.type === "success") color = "text-green-400 font-bold";
-                                            return (
-                                                <div key={index} className={`border-b border-zinc-800/50 pb-0.5 leading-tight ${color}`}>
-                                                    <span className="text-zinc-500 mr-2">[{log.timestamp}]</span>
-                                                    {log.msg}
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+            // ==========================================
+            //      
