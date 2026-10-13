@@ -75,8 +75,8 @@
         // ==========================================
         //         CONFIGURAZIONE DI BASE DEL GIOCO
         // ==========================================
-        const DEBUG_MODE = false;         // Imposta a true per visualizzare il pannello di debug
-        const VERSION = "Ver 1.8";        // Versione del gioco
+        const DEBUG_MODE = true;         // Imposta a true per visualizzare il pannello di debug
+        const VERSION = "Ver 1.9";        // Versione del gioco
         const GRID_SIZE = 8;              // Dimensione della griglia del crucipuzzle (8x8)
 
         // ==========================================
@@ -84,10 +84,25 @@
         // ==========================================
         const BOSS_WORDS_INTERVAL = 5;    // Ogni quante parole scatta la Boss Fight (es. 5)
         const BOSS_MAX_HP = 3;            // Punti vita del Boss (es. 3 o 5)
-        const BOSS_TIME_LIMIT = 50;       // Secondi massimi per sconfiggere il Boss
+        const BOSS_TIME_LIMIT = 30;       // Secondi massimi per sconfiggere il Boss
+
+        // ==========================================
+        //         COMPONENTI COMBINABILI DEL BOSS (PNG TRASPARENTI)
+        // ==========================================
+        // I file devono trovarsi dentro la cartella "assets/"
+        const BOSS_TOILETS = [
+            "toilet1.png",
+            "toilet2.png",
+            "toilet3.png"
+        ];
+
+        const BOSS_HEADS = [
+            "face1.png",
+            "face2.png"
+        ];
 
         // Probabilità base (in %) di ricevere il forziere a fine parola ordinaria (es. 25 = 25%)
-        const BASE_REWARD_PROBABILITY = 5; 
+        const BASE_REWARD_PROBABILITY = 25; 
 
         // ==========================================
         //         ELENCO DEI VIDEO PREMIO CON PESO/PROBABILITÀ
@@ -185,6 +200,8 @@
             const [bossEffect, setBossEffect] = useState(null); // 'hit', 'miss', null
             const [bossEndState, setBossEndState] = useState(null); // 'won', 'lost', null
             const [isBossLocked, setIsBossLocked] = useState(false);
+            const [currentBossToilet, setCurrentBossToilet] = useState('');
+            const [currentBossHead, setCurrentBossHead] = useState('');
 
             const [debugLogs, setDebugLogs] = useState([]);
             const [isConsoleOpen, setIsConsoleOpen] = useState(true);
@@ -387,6 +404,23 @@
                 setBossEffect(null);
                 setBossEndState(null);
                 setIsBossLocked(false);
+
+                // Selezione casuale combinata di Toilet e Testa
+                if (BOSS_TOILETS && BOSS_TOILETS.length > 0) {
+                    const randomToilet = BOSS_TOILETS[Math.floor(Math.random() * BOSS_TOILETS.length)];
+                    setCurrentBossToilet(`assets/${randomToilet}`);
+                } else {
+                    setCurrentBossToilet('');
+                }
+
+                if (BOSS_HEADS && BOSS_HEADS.length > 0) {
+                    const randomHead = BOSS_HEADS[Math.floor(Math.random() * BOSS_HEADS.length)];
+                    setCurrentBossHead(`assets/${randomHead}`);
+                } else {
+                    setCurrentBossHead('');
+                }
+
+                addLog("Boss combinato generato con successo.");
 
                 // Passaggio musica di sottofondo protetto
                 try {
@@ -814,21 +848,40 @@
                                     </div>
                                 </div>
 
-                                {/* ZONA CENTRALE: Avatar Boss + Effetti Visivi */}
-                                <div className="relative flex-grow flex flex-col items-center justify-center my-4 w-full">
-                                    <button 
-                                        onClick={() => speakWordText(bossTargetWord)}
-                                        className="mb-4 bg-white hover:bg-yellow-100 text-indigo-900 px-6 py-2.5 rounded-full font-black text-lg shadow-lg flex items-center gap-2 border-2 border-indigo-200 active:scale-95 transition-all"
-                                    >
-                                        <Icon name="volume-2" size={26} className="text-indigo-600" />
-                                        Ascolta ancora!
-                                    </button>
+                                    {/* Boss Visivo con composizione a livelli (Testa dentro il Water) */}
+                                    <div className={`relative w-52 h-52 flex items-center justify-center transition-transform duration-200 ${bossEffect === 'hit' ? 'animate-shake brightness-125' : ''}`}>
+                                        
+                                        {/* Composizione Toilet + Testa */}
+                                        {(currentBossToilet || currentBossHead) ? (
+                                            <div className="relative w-full h-full flex items-center justify-center">
+                                                {/* Livello 1: La Testa (animata con un leggero bobbing/sbucamento) */}
+                                                {currentBossHead && (
+                                                    <img 
+                                                        src={currentBossHead} 
+                                                        alt="Testa Boss"
+                                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                        className="absolute top-2 w-28 h-28 object-contain z-10 drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)] select-none pointer-events-none animate-bounce [animation-duration:2.5s]"
+                                                    />
+                                                )}
 
-                                    {/* Boss Visivo */}
-                                    <div className="relative w-44 h-44 flex items-center justify-center">
-                                        <div className={`w-36 h-36 bg-gradient-to-br from-red-600 to-zinc-900 rounded-3xl border-4 border-yellow-400 shadow-2xl flex items-center justify-center relative ${bossEffect === 'hit' ? 'animate-shake' : 'animate-pulse'}`}>
-                                            <span className="text-7xl select-none">👾</span>
-                                        </div>
+                                                {/* Livello 2: La Tazza del Water */}
+                                                {currentBossToilet && (
+                                                    <img 
+                                                        src={currentBossToilet} 
+                                                        alt="Toilet Boss"
+                                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                        className="absolute bottom-2 w-44 h-44 object-contain z-20 drop-shadow-[0_12px_24px_rgba(0,0,0,0.7)] select-none pointer-events-none"
+                                                    />
+                                                )}
+                                            </div>
+                                        ) : (
+                                            /* Icona fallback visibile solo se non ci sono immagini configurate */
+                                            <div 
+                                                className="w-36 h-36 bg-gradient-to-br from-red-600 to-zinc-900 rounded-3xl border-4 border-yellow-400 shadow-2xl flex items-center justify-center relative animate-pulse"
+                                            >
+                                                <span className="text-7xl select-none">👾</span>
+                                            </div>
+                                        )}
 
                                         {/* Grafica Esplosione (Colpo a segno) */}
                                         {bossEffect === 'hit' && (
