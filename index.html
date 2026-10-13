@@ -75,7 +75,7 @@
         // ==========================================
         //         CONFIGURAZIONE DI BASE DEL GIOCO
         // ==========================================
-        const DEBUG_MODE = true;         // Imposta a true per visualizzare il pannello di debug
+        const DEBUG_MODE = false;         // Imposta a true per visualizzare il pannello di debug
         const VERSION = "Ver 1.9";        // Versione del gioco
         const GRID_SIZE = 8;              // Dimensione della griglia del crucipuzzle (8x8)
 
@@ -97,8 +97,9 @@
         ];
 
         const BOSS_HEADS = [
-            "face1.png",
-            "face2.png"
+            "head1.png",
+            "head2.png",
+            "head3.png"
         ];
 
         // Probabilità base (in %) di ricevere il forziere a fine parola ordinaria (es. 25 = 25%)
@@ -848,73 +849,72 @@
                                     </div>
                                 </div>
 
-                                    {/* Boss Visivo con composizione a livelli (Testa dentro il Water) */}
-                                    <div className={`relative w-52 h-52 flex items-center justify-center transition-transform duration-200 ${bossEffect === 'hit' ? 'animate-shake brightness-125' : ''}`}>
-                                        
-                                        {/* Composizione Toilet + Testa */}
-                                        {(currentBossToilet || currentBossHead) ? (
-                                            <div className="relative w-full h-full flex items-center justify-center">
-                                                {/* Livello 1: La Testa (animata con un leggero bobbing/sbucamento) */}
-                                                {currentBossHead && (
-                                                    <img 
-                                                        src={currentBossHead} 
-                                                        alt="Testa Boss"
-                                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                                        className="absolute top-2 w-28 h-28 object-contain z-10 drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)] select-none pointer-events-none animate-bounce [animation-duration:2.5s]"
-                                                    />
-                                                )}
+                                {/* Boss Visivo con composizione a livelli (Testa dentro il Water) */}
+                                <div className={`relative w-56 h-56 flex items-center justify-center transition-transform duration-200 ${bossEffect === 'hit' ? 'animate-shake brightness-125' : ''}`}>
+                                    
+                                    {/* Composizione Toilet + Testa */}
+                                    {(currentBossToilet || currentBossHead) ? (
+                                        <div className="relative w-full h-full flex items-center justify-center">
+                                            {/* Livello 1: La Testa (posizionata leggermente sopra e animata) */}
+                                            {currentBossHead && (
+                                                <img 
+                                                    src={currentBossHead} 
+                                                    alt="Testa Boss"
+                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                    className="absolute top-1 w-28 h-28 object-contain z-10 drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)] select-none pointer-events-none animate-bounce [animation-duration:2.5s]"
+                                                />
+                                            )}
 
-                                                {/* Livello 2: La Tazza del Water */}
-                                                {currentBossToilet && (
-                                                    <img 
-                                                        src={currentBossToilet} 
-                                                        alt="Toilet Boss"
-                                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                                        className="absolute bottom-2 w-44 h-44 object-contain z-20 drop-shadow-[0_12px_24px_rgba(0,0,0,0.7)] select-none pointer-events-none"
-                                                    />
-                                                )}
-                                            </div>
-                                        ) : (
-                                            /* Icona fallback visibile solo se non ci sono immagini configurate */
-                                            <div 
-                                                className="w-36 h-36 bg-gradient-to-br from-red-600 to-zinc-900 rounded-3xl border-4 border-yellow-400 shadow-2xl flex items-center justify-center relative animate-pulse"
-                                            >
-                                                <span className="text-7xl select-none">👾</span>
-                                            </div>
-                                        )}
-
-                                        {/* Grafica Esplosione (Colpo a segno) */}
-                                        {bossEffect === 'hit' && (
-                                            <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-explosion">
-                                                <div className="text-8xl select-none">💥</div>
-                                            </div>
-                                        )}
-
-                                        {/* Grafica Nuvola di Fumo (Errore) */}
-                                        {bossEffect === 'miss' && (
-                                            <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-smoke">
-                                                <div className="text-8xl select-none">💨</div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Schermate di fine Boss */}
-                                    {bossEndState === 'won' && (
-                                        <div className="absolute inset-0 bg-black/85 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center z-40 animate-in p-4 text-center">
-                                            <div className="text-yellow-400 text-4xl font-black mb-2 animate-bounce uppercase">BOSS SCONFITTO!</div>
-                                            <div className="text-white text-3xl font-black flex items-center gap-2 bg-yellow-500/20 px-6 py-3 rounded-2xl border border-yellow-400/40">
-                                                +5 STELLE! <Icon name="star" size={32} fill="#facc15" className="text-yellow-400" />
-                                            </div>
+                                            {/* Livello 2: La Tazza del Water */}
+                                            {currentBossToilet && (
+                                                <img 
+                                                    src={currentBossToilet} 
+                                                    alt="Toilet Boss"
+                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                    className="absolute bottom-1 w-44 h-44 object-contain z-20 drop-shadow-[0_12px_24px_rgba(0,0,0,0.7)] select-none pointer-events-none"
+                                                />
+                                            )}
+                                        </div>
+                                    ) : (
+                                        /* Icona fallback visibile se mancano le immagini */
+                                        <div 
+                                            className="w-36 h-36 bg-gradient-to-br from-red-600 to-zinc-900 rounded-3xl border-4 border-yellow-400 shadow-2xl flex items-center justify-center relative animate-pulse"
+                                        >
+                                            <span className="text-7xl select-none">👾</span>
                                         </div>
                                     )}
 
-                                    {bossEndState === 'lost' && (
-                                        <div className="absolute inset-0 bg-black/85 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center z-40 animate-in p-4 text-center">
-                                            <div className="text-red-400 text-3xl font-black mb-2 uppercase">TEMPO SCADUTO!</div>
-                                            <p className="text-white text-xl font-bold">Il boss è scappato... riprova!</p>
+                                    {/* Grafica Esplosione (Colpo a segno) */}
+                                    {bossEffect === 'hit' && (
+                                        <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-explosion">
+                                            <div className="text-8xl select-none">💥</div>
+                                        </div>
+                                    )}
+
+                                    {/* Grafica Nuvola di Fumo (Errore) */}
+                                    {bossEffect === 'miss' && (
+                                        <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-smoke">
+                                            <div className="text-8xl select-none">💨</div>
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Schermate di fine Boss */}
+                                {bossEndState === 'won' && (
+                                    <div className="absolute inset-0 bg-black/85 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center z-40 animate-in p-4 text-center">
+                                        <div className="text-yellow-400 text-4xl font-black mb-2 animate-bounce uppercase">BOSS SCONFITTO!</div>
+                                        <div className="text-white text-3xl font-black flex items-center gap-2 bg-yellow-500/20 px-6 py-3 rounded-2xl border border-yellow-400/40">
+                                            +5 STELLE! <Icon name="star" size={32} fill="#facc15" className="text-yellow-400" />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {bossEndState === 'lost' && (
+                                    <div className="absolute inset-0 bg-black/85 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center z-40 animate-in p-4 text-center">
+                                        <div className="text-red-400 text-3xl font-black mb-2 uppercase">TEMPO SCADUTO!</div>
+                                        <p className="text-white text-xl font-bold">Il boss è scappato... riprova!</p>
+                                    </div>
+                                )}
 
                                 {/* ZONA INFERIORE: Scelta multipla */}
                                 <div className="w-full flex flex-col gap-3 pb-4">
