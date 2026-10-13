@@ -61,11 +61,11 @@
         //         CONFIGURAZIONE PRINCIPALE
         // ==========================================
         const DEBUG_MODE = true;         // Imposta a true per abilitare il pannello di debug e test rapidi
-        const VERSION = "Ver 2.0";        // Versione visualizzata nel menu di gioco
+        const VERSION = "Ver 1.5";        // Versione visualizzata nel menu di gioco
         const GRID_SIZE = 8;             // Dimensione della griglia del crucipuzzle (8x8)
         
         // --- Parametri Premi Video ---
-        const BASE_REWARD_PROBABILITY = 25; // Probabilità base (%) di ottenere il forziere a ogni parola (0-100)
+        const BASE_REWARD_PROBABILITY = 5; // Probabilità base (%) di ottenere il forziere a ogni parola (0-100)
         const REWARD_VIDEOS = [
             { file: "skibidi_toilet_web.mp4", weight: 50 },
             { file: "skibidi_toilet_gigante_web.mp4", weight: 50 }
@@ -76,11 +76,12 @@
         const BOSS_MAX_HP = 3;            // Punti vita del boss (3 o 5 pallini)
         const BOSS_TIME_LIMIT = 30;       // Secondi a disposizione per sconfiggere il boss
         
-         // Liste componibili del boss: la testa viene mostrata DAVANTI alla tazza
+        // Liste componibili del boss: la testa viene mostrata DAVANTI alla tazza
         const BOSS_TOILETS = [
             "toilet1.png",
             "toilet2.png",
 			"toilet3.png"
+			
         ];
         const BOSS_HEADS = [
             "head1.png",
