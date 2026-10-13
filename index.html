@@ -61,7 +61,7 @@
         //         CONFIGURAZIONE PRINCIPALE
         // ==========================================
         const DEBUG_MODE = true;         // Imposta a true per abilitare il pannello di debug e test rapidi
-        const VERSION = "Ver 1.5";        // Versione visualizzata nel menu di gioco
+        const VERSION = "Ver 2.0";        // Versione visualizzata nel menu di gioco
         const GRID_SIZE = 8;             // Dimensione della griglia del crucipuzzle (8x8)
         
         // --- Parametri Premi Video ---
@@ -79,7 +79,8 @@
         // Liste componibili del boss: la testa viene mostrata DAVANTI alla tazza
         const BOSS_TOILETS = [
             "toilet1.png",
-            "toilet2.png"
+            "toilet2.png",
+			"toilet3.png"
         ];
         const BOSS_HEADS = [
             "head1.png",
@@ -160,7 +161,7 @@
             
             // Debugging
             const [debugLogs, setDebugLogs] = useState([]);
-            const [isConsoleOpen, setIsConsoleOpen] = useState(true);
+            const [isConsoleOpen, setIsConsoleOpen] = useState(false);
 
             // Riferimenti audio e timer
             const speechIntervalRef = useRef(null);
@@ -324,34 +325,6 @@
                 return () => clearInterval(speechIntervalRef.current);
             }, [gameStarted, found, speakWord, showReward, isBossFight]);
 
-            const startBossFight = useCallback(() => {
-                addLog("Avvio Boss Fight!", "warning");
-                setGameStarted(true);
-                setIsBossFight(true);
-                setBossHp(BOSS_MAX_HP);
-                setBossTimer(BOSS_TIME_LIMIT);
-                setBossEffect(null);
-
-                // Estrazione casuale tazza e testa componibili
-                if (BOSS_TOILETS.length > 0) {
-                    const randomToilet = BOSS_TOILETS[Math.floor(Math.random() * BOSS_TOILETS.length)];
-                    setCurrentBossToilet(`assets/${randomToilet}`);
-                }
-                if (BOSS_HEADS.length > 0) {
-                    const randomHead = BOSS_HEADS[Math.floor(Math.random() * BOSS_HEADS.length)];
-                    setCurrentBossHead(`assets/${randomHead}`);
-                }
-
-                // Switch audio di sottofondo
-                if (bgMusicRef.current) bgMusicRef.current.pause();
-                if (bossMusicRef.current) {
-                    bossMusicRef.current.currentTime = 0;
-                    bossMusicRef.current.play().catch(e => addLog(`Musica boss non avviata: ${e.message}`, "warning"));
-                }
-
-                setupBossQuestion();
-            }, [addLog]);
-
             const setupBossQuestion = useCallback(() => {
                 const wordPool = (words && words.length >= 3) ? words : FALLBACK_WORDS;
                 const correct = wordPool[Math.floor(Math.random() * wordPool.length)];
@@ -381,6 +354,41 @@
 
                 setTimeout(() => speakWord(correct), 300);
             }, [words, speakWord]);
+
+            const startBossFight = useCallback(() => {
+                addLog("Avvio Boss Fight!", "warning");
+                setGameStarted(true);
+                setIsBossFight(true);
+                setBossHp(BOSS_MAX_HP);
+                setBossTimer(BOSS_TIME_LIMIT);
+                setBossEffect(null);
+
+                // Estrazione casuale tazza e testa componibili
+                if (BOSS_TOILETS.length > 0) {
+                    const randomToilet = BOSS_TOILETS[Math.floor(Math.random() * BOSS_TOILETS.length)];
+                    setCurrentBossToilet(`assets/${randomToilet}`);
+                }
+                if (BOSS_HEADS.length > 0) {
+                    const randomHead = BOSS_HEADS[Math.floor(Math.random() * BOSS_HEADS.length)];
+                    setCurrentBossHead(`assets/${randomHead}`);
+                }
+
+                // Switch audio di sottofondo
+                if (bgMusicRef.current) bgMusicRef.current.pause();
+                if (bossMusicRef.current) {
+                    bossMusicRef.current.currentTime = 0;
+                    bossMusicRef.current.play().catch(e => addLog(`Musica boss non avviata: ${e.message}`, "warning"));
+                }
+
+                setupBossQuestion();
+            }, [addLog, setupBossQuestion]);
+
+            // Garanzia che bossOptions sia sempre popolato durante la Boss Fight
+            useEffect(() => {
+                if (isBossFight && bossOptions.length === 0) {
+                    setupBossQuestion();
+                }
+            }, [isBossFight, bossOptions, setupBossQuestion]);
 
             // Timer del boss
             useEffect(() => {
@@ -680,7 +688,7 @@
                                 }}
                             >
                                 {/* Header Boss: Punti Vita e Timer */}
-                                <div className="w-full max-w-md bg-black/60 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border-2 border-red-500/40 shadow-xl flex items-center justify-between z-30 shrink-0">
+                                <div className="w-full max-w-md bg-black/70 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 border-2 border-red-500/40 shadow-xl flex items-center justify-between z-30 shrink-0">
                                     <div className="flex items-center gap-1.5">
                                         {Array.from({ length: BOSS_MAX_HP }).map((_, idx) => (
                                             <div 
@@ -701,8 +709,8 @@
                                     </div>
                                 </div>
 
-                                {/* Immagine del Boss Componibile (Testa DAVANTI a Toilet, al centro dello spazio rimasto) */}
-                                <div className="relative flex-1 w-full max-w-md flex items-center justify-center overflow-visible pointer-events-none my-1">
+                                {/* Immagine del Boss Gigante: centrata nello schermo, z-20 */}
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-20">
                                     <div 
                                         style={{ width: `${BOSS_CONTAINER_SIZE}px`, height: `${BOSS_CONTAINER_SIZE}px` }}
                                         className={`relative flex items-center justify-center transition-transform duration-200 pointer-events-auto ${bossEffect === 'hit' ? 'animate-shake brightness-125' : ''}`}
@@ -719,7 +727,7 @@
                                                             width: `${BOSS_TOILET_WIDTH}px`, 
                                                             height: `${BOSS_TOILET_HEIGHT}px` 
                                                         }}
-                                                        className="absolute bottom-0 object-contain z-10 drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] pointer-events-none select-none max-w-none"
+                                                        className="absolute bottom-12 object-contain z-10 drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] pointer-events-none select-none max-w-none"
                                                     />
                                                 )}
 
@@ -758,18 +766,22 @@
                                     </div>
                                 </div>
 
-                                {/* Scelte Multiple: SEMPRE posizionate in primo piano sul fondo schermo (z-50, shrink-0) */}
-                                <div className="w-full max-w-md flex flex-col gap-2 z-50 shrink-0 pb-1">
-                                    {bossOptions.map((opt, i) => (
-                                        <button
-                                            key={i}
-                                            onClick={() => handleBossOptionClick(opt)}
-                                            disabled={bossEffect !== null}
-                                            className="w-full bg-white hover:bg-indigo-50 active:bg-indigo-100 text-indigo-950 py-3 sm:py-3.5 px-4 rounded-2xl font-black text-2xl sm:text-3xl shadow-[0_8px_25px_rgba(0,0,0,0.7)] border-2 border-indigo-400 border-b-4 border-b-indigo-600 active:translate-y-1 active:shadow-none transition-all tracking-wider uppercase text-center disabled:opacity-75 cursor-pointer select-none"
-                                        >
-                                            {opt}
-                                        </button>
-                                    ))}
+                                {/* Scelte Multiple: IN PRIMO PIANO (z-50) DAVANTI ALLA TAZZA */}
+                                <div className="w-full max-w-md flex flex-col gap-2.5 z-50 shrink-0 pb-12 sm:pb-8 px-2">
+                                    {bossOptions.length > 0 ? (
+                                        bossOptions.map((opt, i) => (
+                                            <button
+                                                key={i}
+                                                onClick={() => handleBossOptionClick(opt)}
+                                                disabled={bossEffect !== null}
+                                                className="w-full bg-white hover:bg-yellow-50 active:bg-yellow-100 text-indigo-950 py-3 sm:py-3.5 px-4 rounded-2xl font-black text-2xl sm:text-3xl shadow-[0_8px_25px_rgba(0,0,0,0.85)] border-2 border-indigo-300 border-b-6 border-b-indigo-600 active:translate-y-1 active:shadow-none transition-all tracking-wider uppercase text-center disabled:opacity-75 cursor-pointer select-none"
+                                            >
+                                                {opt}
+                                            </button>
+                                        ))
+                                    ) : (
+                                        <div className="text-white text-center font-bold animate-pulse">Caricamento opzioni...</div>
+                                    )}
                                 </div>
                             </div>
                         ) : gameStarted ? (
