@@ -60,7 +60,7 @@
         // ==========================================
         //         CONFIGURAZIONE PRINCIPALE
         // ==========================================
-        const DEBUG_MODE = true;         // Imposta a true per abilitare il pannello di debug e test rapidi
+        const DEBUG_MODE = false;         // Imposta a true per abilitare il pannello di debug e test rapidi
         const VERSION = "Ver 1.5";        // Versione visualizzata nel menu di gioco
         const GRID_SIZE = 8;             // Dimensione della griglia del crucipuzzle (8x8)
         
@@ -76,7 +76,7 @@
         const BOSS_MAX_HP = 3;            // Punti vita del boss (3 o 5 pallini)
         const BOSS_TIME_LIMIT = 30;       // Secondi a disposizione per sconfiggere il boss
         
-        // Liste componibili del boss: la testa viene mostrata DAVANTI alla tazza
+         // Liste componibili del boss: la testa viene mostrata DAVANTI alla tazza
         const BOSS_TOILETS = [
             "toilet1.png",
             "toilet2.png",
@@ -733,23 +733,23 @@
                                             </div>
                                         )}
 
-                                        {/* Effetto Mancato */}
+                                        {/* Effetto Fumo 💨 */}
                                         {bossEffect === 'miss' && (
                                             <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none zoom-in">
-                                                <span className="text-8xl">❌</span>
+                                                <span className="text-8xl">💨</span>
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* Scelte Multiple (3 Parole Grandi) */}
-                                <div className="w-full flex flex-col gap-3">
+                                {/* Scelte Multiple (3 Parole Grandi) - Sempre in primo piano sopra al boss */}
+                                <div className="w-full flex flex-col gap-3 relative z-40 mt-auto pt-2">
                                     {bossOptions.map((opt, i) => (
                                         <button
                                             key={i}
                                             onClick={() => handleBossOptionClick(opt)}
                                             disabled={bossEffect !== null}
-                                            className="w-full bg-white/95 hover:bg-white text-indigo-950 py-4 px-6 rounded-2xl font-black text-3xl shadow-xl border-b-4 border-indigo-300 active:translate-y-1 active:shadow-none transition-all tracking-wider uppercase text-center disabled:opacity-75"
+                                            className="w-full bg-white hover:bg-indigo-50 text-indigo-950 py-4 px-6 rounded-2xl font-black text-3xl shadow-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-400 active:translate-y-1 active:shadow-none transition-all tracking-wider uppercase text-center disabled:opacity-75"
                                         >
                                             {opt}
                                         </button>
