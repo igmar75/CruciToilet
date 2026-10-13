@@ -60,7 +60,7 @@
         // ==========================================
         //         CONFIGURAZIONE PRINCIPALE
         // ==========================================
-        const DEBUG_MODE = true;         // Imposta a true per abilitare il pannello di debug e test rapidi
+        const DEBUG_MODE = false;         // Imposta a true per abilitare il pannello di debug e test rapidi
         const VERSION = "Ver 1.5";        // Versione visualizzata nel menu di gioco
         const GRID_SIZE = 8;             // Dimensione della griglia del crucipuzzle (8x8)
         
@@ -79,8 +79,7 @@
         // Liste componibili del boss: la testa viene mostrata DAVANTI alla tazza
         const BOSS_TOILETS = [
             "toilet1.png",
-            "toilet2.png",
-			"toilet3.png"
+            "toilet2.png"
         ];
         const BOSS_HEADS = [
             "head1.png",
@@ -678,7 +677,10 @@
 
                                 {/* Immagine del Boss Componibile (Testa DAVANTI a Toilet) */}
                                 <div className="relative my-auto flex flex-col items-center justify-center">
-                                    <div className={`relative w-64 h-64 flex items-center justify-center transition-transform duration-200 ${bossEffect === 'hit' ? 'animate-shake brightness-125' : ''}`}>
+                                    <div 
+                                        style={{ width: `${BOSS_CONTAINER_SIZE}px`, height: `${BOSS_CONTAINER_SIZE}px` }}
+                                        className={`relative flex items-center justify-center transition-transform duration-200 ${bossEffect === 'hit' ? 'animate-shake brightness-125' : ''}`}
+                                    >
                                         
                                         {(currentBossToilet || currentBossHead) ? (
                                             <div className="relative w-full h-full flex items-center justify-center">
@@ -688,7 +690,11 @@
                                                         src={currentBossToilet} 
                                                         alt="Toilette Boss"
                                                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                                        className="absolute bottom-2 w-52 h-52 object-contain z-10 drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] pointer-events-none select-none"
+                                                        style={{ 
+                                                            width: `${BOSS_TOILET_WIDTH}px`, 
+                                                            height: `${BOSS_TOILET_HEIGHT}px` 
+                                                        }}
+                                                        className="absolute bottom-0 object-contain z-10 drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] pointer-events-none select-none"
                                                     />
                                                 )}
 
@@ -698,7 +704,12 @@
                                                         src={currentBossHead} 
                                                         alt="Testa Boss"
                                                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                                        className="absolute top-2 w-32 h-32 object-contain z-20 drop-shadow-[0_8px_16px_rgba(0,0,0,0.7)] pointer-events-none select-none animate-bounce [animation-duration:2.5s]"
+                                                        style={{ 
+                                                            width: `${BOSS_HEAD_WIDTH}px`, 
+                                                            height: `${BOSS_HEAD_HEIGHT}px`,
+                                                            top: `${BOSS_HEAD_OFFSET_TOP}px`
+                                                        }}
+                                                        className="absolute object-contain z-20 drop-shadow-[0_8px_16px_rgba(0,0,0,0.7)] pointer-events-none select-none animate-bounce [animation-duration:2.5s]"
                                                     />
                                                 )}
                                             </div>
@@ -720,15 +731,6 @@
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Tasto Riascolto Parola */}
-                                    <button 
-                                        onClick={() => speakWord(bossCurrentWord)}
-                                        className="mt-2 bg-yellow-400 hover:bg-yellow-300 text-indigo-950 px-6 py-2.5 rounded-full font-black text-lg shadow-lg flex items-center gap-2 active:scale-95 transition-transform"
-                                    >
-                                        <Icon name="volume-2" size={24} />
-                                        Ascolta ancora!
-                                    </button>
                                 </div>
 
                                 {/* Scelte Multiple (3 Parole Grandi) */}
