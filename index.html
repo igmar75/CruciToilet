@@ -60,7 +60,7 @@
         // ==========================================
         //         CONFIGURAZIONE PRINCIPALE
         // ==========================================
-        const DEBUG_MODE = false;         // Imposta a true per abilitare il pannello di debug e test rapidi
+        const DEBUG_MODE = true;         // Imposta a true per abilitare il pannello di debug e test rapidi
         const VERSION = "Ver 2.0";        // Versione visualizzata nel menu di gioco
         const GRID_SIZE = 8;             // Dimensione della griglia del crucipuzzle (8x8)
         
@@ -80,7 +80,7 @@
         const BOSS_TOILETS = [
             "toilet1.png",
             "toilet2.png",
-			"toilet3.png"
+            "toilet3.png"
         ];
         const BOSS_HEADS = [
             "head1.png",
@@ -88,11 +88,11 @@
         ];
 
         // --- Parametri Dimensionali e Posizionamento Boss (in pixel) ---
-        const BOSS_CONTAINER_SIZE = 512;   // Dimensione del riquadro contenitore del boss
-        const BOSS_TOILET_WIDTH = 416;     // Larghezza della tazza / toilet
-        const BOSS_TOILET_HEIGHT = 416;    // Altezza della tazza / toilet
-        const BOSS_HEAD_WIDTH = 288;       // Larghezza della testa
-        const BOSS_HEAD_HEIGHT = 288;      // Altezza della testa
+        const BOSS_CONTAINER_SIZE = 640;   // Dimensione del riquadro contenitore del boss
+        const BOSS_TOILET_WIDTH = 520;     // Larghezza della tazza / toilet
+        const BOSS_TOILET_HEIGHT = 520;    // Altezza della tazza / toilet
+        const BOSS_HEAD_WIDTH = 360;       // Larghezza della testa
+        const BOSS_HEAD_HEIGHT = 360;      // Altezza della testa
         const BOSS_HEAD_OFFSET_TOP = 0;    // Spostamento verticale della testa (valori positivi la abbassano, negativi la alzano)
 
         const AUDIO_CONFIG = {
@@ -163,13 +163,18 @@
             const [debugLogs, setDebugLogs] = useState([]);
             const [isConsoleOpen, setIsConsoleOpen] = useState(false);
 
-            // Riferimenti audio e timer
+            // Riferimenti audio, timer e stato sincronizzato anti-race-condition
             const speechIntervalRef = useRef(null);
             const audioCtxRef = useRef(null);
             const bgMusicRef = useRef(null);
             const bossMusicRef = useRef(null);
             const bossTimerRef = useRef(null);
             const videoRef = useRef(null);
+
+            // Ref per evitare race condition sui clic rapidi di Elia
+            const foundCountRef = useRef(0);
+            const feedbackMapRef = useRef({});
+            const correctCoordsRef = useRef([]);
 
             const addLog = useCallback((msg, type = "info") => {
                 const timestamp = new Date().toLocaleTimeString();
@@ -285,6 +290,10 @@
                 setFound(false);
                 setFoundCount(0);
                 setFeedbackMap({});
+
+                // Reset immediato dei riferimenti sincroni
+                foundCountRef.current = 0;
+                feedbackMapRef.current = {};
                 
                 let newGrid = Array(GRID_SIZE).fill(null).map(() => 
                     Array(GRID_SIZE).fill(null).map(() => {
@@ -302,6 +311,7 @@
                 }
                 setGrid(newGrid);
                 setCorrectCoords(coords);
+                correctCoordsRef.current = coords;
             }, [isUppercase, words]);
 
             const speakWord = useCallback((wordToSpeak = null) => {
@@ -440,7 +450,6 @@
                 if (!isBossFight || bossEffect !== null || bossHp <= 0) return;
 
                 if (option === bossCurrentWord) {
-                    // Colpo a segno
                     setBossEffect('hit');
                     try {
                         const hitAudio = new Audio('audio/boss_hit.mp3');
@@ -462,7 +471,6 @@
                         }
                     }, 800);
                 } else {
-                    // Colpo mancato
                     setBossEffect('miss');
                     try {
                         const missAudio = new Audio('audio/boss_miss.mp3');
@@ -479,24 +487,41 @@
                 }
             };
 
+            // ========================================================
+            //   GESTIONE CLIC CELLE ROBUSTA CONTRO I CLIC ULTRA-RAPIDI
+            // ========================================================
             const handleCellClick = (r, c) => {
                 if (found || showReward || isBossFight) return;
                 const id = `${r}-${c}`;
-                const expectedId = correctCoords[foundCount];
+                
+                // Se la lettera è GIÀ stata indovinata ed è verde, ignora qualsiasi tocco successivo
+                if (feedbackMapRef.current[id] === 'correct') {
+                    return;
+                }
+
+                const currentCount = foundCountRef.current;
+                const coords = correctCoordsRef.current;
+                const expectedId = coords[currentCount];
 
                 if (id === expectedId) {
-                    // Lettera corretta in ordine sequenziale
+                    // --- CASO 1: Lettera corretta in rigoroso ordine sequenziale ---
                     playTone(660, 'sine', 0.15, AUDIO_CONFIG.toneVolume);
-                    const newFeedback = { ...feedbackMap, [id]: 'correct' };
-                    setFeedbackMap(newFeedback);
-                    const newCount = foundCount + 1;
-                    setFoundCount(newCount);
+                    
+                    const nextCount = currentCount + 1;
+                    foundCountRef.current = nextCount;
+                    setFoundCount(nextCount);
 
-                    if (newCount === correctCoords.length) {
+                    feedbackMapRef.current = { ...feedbackMapRef.current, [id]: 'correct' };
+                    setFeedbackMap({ ...feedbackMapRef.current });
+
+                    // La vittoria scatta SOLO se tutte le coordinate della parola sono ora verdi
+                    const allCompleted = coords.length > 0 && coords.every(coordId => feedbackMapRef.current[coordId] === 'correct');
+
+                    if (allCompleted) {
                         setFound(true);
                         const nextTotal = totalSolved + 1;
                         setTotalSolved(nextTotal);
-                        addLog(`Parola indovinata! Totale: ${nextTotal}`);
+                        addLog(`Parola completata! (${coords.length}/${coords.length} lettere) - Totale: ${nextTotal}`);
 
                         setTimeout(() => playTone(523, 'sine', 0.2, AUDIO_CONFIG.toneVolume), 100);
                         setTimeout(() => playTone(783, 'sine', 0.4, AUDIO_CONFIG.toneVolume), 300);
@@ -534,28 +559,38 @@
                             }
                         }, 2500);
                     }
-                } else if (correctCoords.includes(id)) {
-                    // Lettera della parola ma FUORI ORDINE (giallo momentaneo)
+                } else if (coords.includes(id)) {
+                    // --- CASO 2: Lettera appartiene alla parola ma è FUORI ORDINE ---
+                    // Se non è già verde, lampeggia di giallo
                     playTone(330, 'triangle', 0.2, AUDIO_CONFIG.toneVolume);
-                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong-order' }));
+                    
+                    feedbackMapRef.current = { ...feedbackMapRef.current, [id]: 'wrong-order' };
+                    setFeedbackMap({ ...feedbackMapRef.current });
+
                     setTimeout(() => {
-                        setFeedbackMap(prev => {
-                            const next = { ...prev };
-                            if (next[id] === 'wrong-order') delete next[id];
-                            return next;
-                        });
-                    }, 600);
+                        // Rimuove il giallo SOLO se la cella nel frattempo non è diventata verde
+                        if (feedbackMapRef.current[id] === 'wrong-order') {
+                            const updated = { ...feedbackMapRef.current };
+                            delete updated[id];
+                            feedbackMapRef.current = updated;
+                            setFeedbackMap(updated);
+                        }
+                    }, 500);
                 } else {
-                    // Lettera estranea alla parola (rosso momentaneo)
+                    // --- CASO 3: Lettera completamente errata (estranea alla parola) ---
                     playTone(150, 'triangle', 0.3, AUDIO_CONFIG.toneVolume);
-                    setFeedbackMap(prev => ({ ...prev, [id]: 'wrong' }));
+                    
+                    feedbackMapRef.current = { ...feedbackMapRef.current, [id]: 'wrong' };
+                    setFeedbackMap({ ...feedbackMapRef.current });
+
                     setTimeout(() => {
-                        setFeedbackMap(prev => {
-                            const next = { ...prev };
-                            if (next[id] === 'wrong') delete next[id];
-                            return next;
-                        });
-                    }, 600);
+                        if (feedbackMapRef.current[id] === 'wrong') {
+                            const updated = { ...feedbackMapRef.current };
+                            delete updated[id];
+                            feedbackMapRef.current = updated;
+                            setFeedbackMap(updated);
+                        }
+                    }, 500);
                 }
             };
 
@@ -871,7 +906,7 @@
                         )}
                     </div>
 
-                    {}
+                    {/* PANNELLO DI DEBUG */}
                     {DEBUG_MODE && (
                         <div className="fixed bottom-0 left-0 right-0 z-[200] bg-zinc-900 text-zinc-300 font-mono text-xs border-t-4 border-red-500 shadow-2xl transition-all duration-300" style={{ height: isConsoleOpen ? '180px' : '30px' }}>
                             <div className="flex items-center justify-between bg-zinc-800 px-4 py-1 border-b border-zinc-700">
