@@ -60,7 +60,7 @@
         // ==========================================
         //         CONFIGURAZIONE PRINCIPALE
         // ==========================================
-        const DEBUG_MODE = false;         // Imposta a true per abilitare il pannello di debug e test rapidi
+        const DEBUG_MODE = true;         // Imposta a true per abilitare il pannello di debug e test rapidi
         const VERSION = "Ver 2.0";        // Versione visualizzata nel menu di gioco
         const GRID_SIZE = 8;             // Dimensione della griglia del crucipuzzle (8x8)
         
@@ -315,30 +315,54 @@
             }, [isUppercase, words]);
 
             const speakWord = useCallback((wordToSpeak = null) => {
-                const target = wordToSpeak || currentWord;
+                const target = wordToSpeak || (isBossFight ? bossCurrentWord : currentWord);
                 if (!target) return;
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(target.toLowerCase());
-                utterance.lang = 'it-IT';
-                utterance.rate = AUDIO_CONFIG.speechRate; 
-                utterance.volume = AUDIO_CONFIG.speechVolume;
-                window.speechSynthesis.speak(utterance);
-            }, [currentWord]);
+                try {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(target.toLowerCase());
+                    utterance.lang = 'it-IT';
+                    utterance.rate = AUDIO_CONFIG.speechRate; 
+                    utterance.volume = AUDIO_CONFIG.speechVolume;
+                    window.speechSynthesis.speak(utterance);
+                } catch (e) {
+                    addLog(`Errore sintesi vocale: ${e.message}`, "warning");
+                }
+            }, [currentWord, bossCurrentWord, isBossFight, addLog]);
 
+            // Ciclo di lettura vocale per il gioco standard
             useEffect(() => {
-                if (gameStarted && !found && !showReward && !isBossFight) {
-                    speakWord();
-                    speechIntervalRef.current = setInterval(() => speakWord(), 4000);
-                } else {
+                if (gameStarted && !found && !showReward && !isBossFight && currentWord) {
+                    speakWord(currentWord);
+                    speechIntervalRef.current = setInterval(() => speakWord(currentWord), 4000);
+                } else if (!isBossFight) {
                     clearInterval(speechIntervalRef.current);
                 }
-                return () => clearInterval(speechIntervalRef.current);
-            }, [gameStarted, found, speakWord, showReward, isBossFight]);
+                return () => {
+                    if (!isBossFight) clearInterval(speechIntervalRef.current);
+                };
+            }, [gameStarted, found, currentWord, speakWord, showReward, isBossFight]);
+
+            // Ciclo di lettura vocale dedicato alla Boss Fight
+            useEffect(() => {
+                if (gameStarted && isBossFight && bossHp > 0 && bossEffect === null && bossCurrentWord) {
+                    const initialSpeakTimer = setTimeout(() => {
+                        speakWord(bossCurrentWord);
+                    }, 250);
+                    const bossSpeechInterval = setInterval(() => {
+                        speakWord(bossCurrentWord);
+                    }, 4000);
+                    return () => {
+                        clearTimeout(initialSpeakTimer);
+                        clearInterval(bossSpeechInterval);
+                    };
+                }
+            }, [gameStarted, isBossFight, bossHp, bossEffect, bossCurrentWord, speakWord]);
 
             const setupBossQuestion = useCallback(() => {
                 const wordPool = (words && words.length >= 3) ? words : FALLBACK_WORDS;
                 const correct = wordPool[Math.floor(Math.random() * wordPool.length)];
                 setBossCurrentWord(correct);
+                addLog(`Parola Boss selezionata: ${correct}`);
 
                 const distractors = [];
                 let attempts = 0;
@@ -361,12 +385,11 @@
 
                 const options = [correct, ...distractors].sort(() => Math.random() - 0.5);
                 setBossOptions(options);
-
-                setTimeout(() => speakWord(correct), 300);
-            }, [words, speakWord]);
+            }, [words, addLog]);
 
             const startBossFight = useCallback(() => {
                 addLog("Avvio Boss Fight!", "warning");
+                window.speechSynthesis.cancel();
                 setGameStarted(true);
                 setIsBossFight(true);
                 setBossHp(BOSS_MAX_HP);
@@ -421,6 +444,7 @@
 
             const endBossFight = (victory) => {
                 clearInterval(bossTimerRef.current);
+                window.speechSynthesis.cancel();
                 if (bossMusicRef.current) {
                     bossMusicRef.current.pause();
                     bossMusicRef.current.currentTime = 0;
@@ -482,7 +506,6 @@
 
                     setTimeout(() => {
                         setBossEffect(null);
-                        speakWord(bossCurrentWord);
                     }, 800);
                 }
             };
